@@ -24,7 +24,6 @@ import threading
 from collections import Counter, defaultdict
 from copy import deepcopy
 from io import BytesIO
-import io
 from timeit import default_timer as timer
 
 import numpy as np
@@ -33,20 +32,10 @@ import trio
 import xgboost as xgb
 from huggingface_hub import snapshot_download
 from PIL import Image
-# Ensure Image.Resampling exists on older Pillow versions
-if not hasattr(Image, "Resampling"):
-    class _Resampling:
-        LANCZOS = Image.LANCZOS
-    Image.Resampling = _Resampling
 from pypdf import PdfReader as pdf2_read
 
+from api import settings
 from api.utils.file_utils import get_project_base_directory
-try:
-    from api.utils.misc_utils import pip_install_torch
-except Exception:
-    def pip_install_torch():
-        # Fallback noop if the helper is not available in this codebase.
-        return None
 from deepdoc.vision import OCR, AscendLayoutRecognizer, LayoutRecognizer, Recognizer, TableStructureRecognizer
 from rag.app.picture import vision_llm_chunk as picture_vision_llm_chunk
 from rag.nlp import rag_tokenizer
@@ -95,13 +84,14 @@ class RAGFlowPdfParser:
         self.tbl_det = TableStructureRecognizer()
 
         self.updown_cnt_mdl = xgb.Booster()
-        try:
-            pip_install_torch()
-            import torch.cuda
-            if torch.cuda.is_available():
-                self.updown_cnt_mdl.set_param({"device": "cuda"})
-        except Exception:
-            logging.info("No torch found.")
+        if not settings.LIGHTEN:
+            try:
+                import torch.cuda
+
+                if torch.cuda.is_available():
+                    self.updown_cnt_mdl.set_param({"device": "cuda"})
+            except Exception:
+                logging.exception("RAGFlowPdfParser __init__")
         try:
             model_dir = os.path.join(get_project_base_directory(), "rag/res/deepdoc")
             self.updown_cnt_mdl.load_model(os.path.join(model_dir, "updown_concat_xgb.model"))
@@ -1141,7 +1131,7 @@ class RAGFlowPdfParser:
             bxes = [b for bxs in self.boxes for b in bxs]
             self.is_english = re.search(r"[\na-zA-Z0-9,/¸;:'\[\]\(\)!@#$%^&*\"?<>._-]{30,}", "".join([b["text"] for b in random.choices(bxes, k=min(30, len(bxes)))]))
 
-        logging.debug(f"Is it English: {self.is_english}")
+        logging.debug("Is it English:", self.is_english)
 
         self.page_cum_height = np.cumsum(self.page_cum_height)
         assert len(self.page_cum_height) == len(self.page_images) + 1
@@ -1363,11 +1353,19 @@ class VisionParser(RAGFlowPdfParser):
         super().__init__(*args, **kwargs)
         self.vision_model = vision_model
 
-    def __images__(self, fnm, zoomin=3, page_from=0, page_to=299, callback=None):
+    def __images__(self, fnm, zoomin=4, page_from=0, page_to=299, callback=None):
         try:
             with sys.modules[LOCK_KEY_pdfplumber]:
-                self.pdf = pdfplumber.open(fnm) if isinstance(fnm, str) else pdfplumber.open(BytesIO(fnm))
-                self.page_images = [p.to_image(resolution=72 * zoomin).annotated for i, p in enumerate(self.pdf.pages[page_from:page_to])]
+                self.pdf = (
+                    pdfplumber.open(fnm)
+                    if isinstance(fnm, str)
+                    else pdfplumber.open(BytesIO(fnm))
+                )
+                # NOTE: use original (NOT annotated) to avoid overlays
+                self.page_images = [
+                    p.to_image(resolution=72 * zoomin).original
+                    for _, p in enumerate(self.pdf.pages[page_from:page_to])
+                ]
                 self.total_page = len(self.pdf.pages)
         except Exception:
             self.page_images = None
@@ -1375,199 +1373,74 @@ class VisionParser(RAGFlowPdfParser):
             logging.exception("VisionParser __images__")
 
     def __call__(self, filename, from_page=0, to_page=100000, **kwargs):
-        # Extract prompt_text from kwargs
-        prompt_text = kwargs.get("prompt_text", None)
+        """
+        kwargs:
+          - callback: progress callback
+          - zoomin: int (dpi multiplier)
+          - prompt_text: str (raw Markdown instruction to pass to the VLM)
+        """
         callback = kwargs.get("callback", lambda prog, msg: None)
-        zoomin = kwargs.get("zoomin", 3)
+        zoomin = kwargs.get("zoomin", 4)
+        prompt_text = kwargs.get("prompt_text", None)
 
-        # Validate zoomin
-        if not isinstance(zoomin, (int, float)) or zoomin <= 0:
-            logging.error(f"Invalid zoomin value: {zoomin}, using default 3")
-            zoomin = 3
-
-        # Validate page range types and values
-        try:
-            from_page = int(from_page)
-        except Exception:
-            logging.warning(f"Invalid from_page type: {from_page}, using 0")
-            from_page = 0
-        try:
-            to_page = int(to_page)
-        except Exception:
-            logging.warning(f"Invalid to_page type: {to_page}, using 100000")
-            to_page = 100000
-
-        if from_page < 0:
-            logging.warning(f"Invalid from_page: {from_page}, using 0")
-            from_page = 0
-        if to_page < from_page:
-            logging.error(f"Invalid page range: from={from_page}, to={to_page}")
-            return [], []
-
-        # Validate vision model presence
-        if not getattr(self, "vision_model", None):
-            logging.error("VisionParser: vision_model is not set or not configured")
-            return [], []
-
-        # Extract images (may set self.page_images)
         self.__images__(fnm=filename, zoomin=zoomin, page_from=from_page, page_to=to_page, callback=callback)
-
-        # Check if images were extracted
-        if not getattr(self, "page_images", None):
-            logging.warning(f"No images extracted from {filename}")
-            return [], []
-
         total_pdf_pages = self.total_page
 
         start_page = max(0, from_page)
         end_page = min(to_page, total_pdf_pages)
 
-        # Summary info
-        try:
-            img_cnt = len(self.page_images) if self.page_images else 0
-        except Exception:
-            img_cnt = 0
-        logging.info(f"VisionParser: Processing {img_cnt} pages (from={from_page}, to={to_page}, total_pdf_pages={total_pdf_pages})")
-
         all_docs = []
 
-        for idx, img_pil in enumerate(self.page_images or []):
+        def render_prompt(tmpl: str, page_no: int) -> str:
+            # Minimal {{ page }} replacement (covers common cases without Jinja)
+            # Also tolerate `{page}` just in case.
+            if tmpl is None:
+                return ""
+            out = tmpl.replace("{{ page }}", str(page_no))
+            out = out.replace("{page}", str(page_no))
+            return out
+
+        for idx, pil_img in enumerate(self.page_images or []):
             pdf_page_num = idx  # 0-based
             if pdf_page_num < start_page or pdf_page_num >= end_page:
                 continue
 
-            # Preserve original page image size for metadata
-            orig_width, orig_height = img_pil.size
-            logging.debug(f"VisionParser: Page {idx+1}/{img_cnt}: Original size {orig_width}x{orig_height}")
+            # Encode to JPEG bytes (mirrors your successful curl test behavior)
+            img_rgb = pil_img.convert("RGB")
+            # Optional size clip to keep tokens sane
+            max_side = 2000
+            w, h = img_rgb.size
+            if max(w, h) > max_side:
+                s = max_side / float(max(w, h))
+                img_rgb = img_rgb.resize((int(w * s), int(h * s)))
+            buf = io.BytesIO()
+            img_rgb.save(buf, format="JPEG", quality=90, optimize=True)
+            buf.seek(0)
+            jpg_bytes = buf.read()
 
-            try:
-                # Convert to RGB
-                img = img_pil.convert("RGB")
+            # Page-aware prompt if provided
+            prompt = render_prompt(prompt_text or "", pdf_page_num + 1)
 
-                # Resize if longest side > 2000px (maintain aspect ratio)
-                max_side = max(img.size)
-                if max_side > 2000:
-                    scale = 2000.0 / max_side
-                    new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
-                    img = img.resize(new_size, resample=Image.Resampling.LANCZOS)
-                    logging.debug(f"VisionParser: Page {idx+1}: Resized to {img.size[0]}x{img.size[1]}")
+            text = picture_vision_llm_chunk(
+                binary=jpg_bytes,
+                vision_model=self.vision_model,
+                prompt=prompt,
+                callback=callback,
+            )
 
-                # Convert to JPEG bytes
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=90, optimize=True)
-                jpg_bytes = buf.getvalue()
-                logging.debug(f"VisionParser: Page {idx+1}: JPEG bytes: {len(jpg_bytes)} bytes")
+            if kwargs.get("callback"):
+                kwargs["callback"](
+                    idx * 1.0 / len(self.page_images),
+                    f"Processed: {idx + 1}/{len(self.page_images)}",
+                )
 
-                # If JPEG bytes are very large, attempt additional compression rather than failing
-                MAX_JPG_BYTES = 5 * 1024 * 1024  # 5MB
-                if len(jpg_bytes) > MAX_JPG_BYTES:
-                    logging.warning(f"VisionParser: Page {idx+1}: JPEG size {len(jpg_bytes)} exceeds {MAX_JPG_BYTES} bytes, attempting extra compression")
-                    # try lower quality compression
-                    buf = io.BytesIO()
-                    img.save(buf, format="JPEG", quality=60, optimize=True)
-                    jpg_bytes = buf.getvalue()
-                    logging.debug(f"VisionParser: Page {idx+1}: After compress quality=60 size={len(jpg_bytes)}")
-                    # if still too large, resize down further
-                    if len(jpg_bytes) > MAX_JPG_BYTES:
-                        scale = 0.5
-                        new_size = (max(100, int(img.size[0] * scale)), max(100, int(img.size[1] * scale)))
-                        img_small = img.resize(new_size, resample=Image.Resampling.LANCZOS)
-                        buf = io.BytesIO()
-                        img_small.save(buf, format="JPEG", quality=60, optimize=True)
-                        jpg_bytes = buf.getvalue()
-                        logging.debug(f"VisionParser: Page {idx+1}: After shrink size={len(jpg_bytes)}")
+            width, height = pil_img.size
+            all_docs.append((
+                text or "",
+                f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{width / zoomin:.1f}\t{0.0:.1f}\t{height / zoomin:.1f}##"
+            ))
 
-                # Build prompt: use provided prompt_text (with page interpolation) or default generator
-                if prompt_text is not None:
-                    prompt = prompt_text.replace("{{ page }}", str(pdf_page_num + 1)) if "{{ page }}" in prompt_text else prompt_text
-                else:
-                    prompt = vision_llm_describe_prompt(page=pdf_page_num + 1)
-
-                # Log prompt preview/length (trim to avoid huge logs)
-                try:
-                    preview = (prompt[:200] + "...") if len(str(prompt)) > 200 else prompt
-                    logging.debug(f"VisionParser: Page {idx+1}: Prompt length: {len(str(prompt))} chars, preview: {preview}")
-                except Exception:
-                    logging.debug(f"VisionParser: Page {idx+1}: Prompt prepared (unable to render preview)")
-
-                # Call VLM with page-level try/except to avoid whole-document failure
-                try:
-                    text = picture_vision_llm_chunk(
-                        binary=jpg_bytes,
-                        vision_model=self.vision_model,
-                        prompt=prompt,
-                        callback=callback,
-                    )
-                except Exception as e:
-                    logging.error(f"Page {pdf_page_num + 1}: VLM call failed: {e}")
-                    text = f"[Page {pdf_page_num + 1}: Processing error - {str(e)[:100]}]"
-                # Progress/info per page
-                logging.info(f"VisionParser: Page {idx+1}/{img_cnt} processed by VLM")
-
-                if kwargs.get("callback"):
-                    try:
-                        kwargs["callback"](idx * 1.0 / img_cnt if img_cnt else 0.0, f"Processed: {idx + 1}/{img_cnt}")
-                    except Exception:
-                        pass
-
-                # Normalize and robustly check VLM text
-                if isinstance(text, tuple) and len(text) >= 1:
-                    # Some models may return (text, tokens)
-                    text = text[0]
-                if text is None:
-                    logging.warning(f"Page {pdf_page_num + 1}: VLM returned None or no text")
-                    text = f"[Page {pdf_page_num + 1}: No content detected by VLM]"
-                if not isinstance(text, str):
-                    logging.warning(f"Page {pdf_page_num + 1}: VLM returned non-string ({type(text)}), coercing to str")
-                    try:
-                        text = str(text)
-                    except Exception:
-                        text = f"[Page {pdf_page_num + 1}: Non-string VLM output]"
-
-                # Cleanup and basic heuristics
-                cleaned = text.strip()
-                # Handle very short responses
-                if not cleaned or len(cleaned) < 10:
-                    logging.warning(f"Page {pdf_page_num + 1}: Empty or very short VLM response ('{cleaned}')")
-                    cleaned = f"[Page {pdf_page_num + 1}: No content detected by VLM]"
-
-                # Detect possible gibberish (low vocabulary ratio)
-                words = re.findall(r"\w+", cleaned)
-                if len(words) > 20:
-                    unique_words = set(words)
-                    vocab_ratio = len(unique_words) / len(words) if len(words) else 0.0
-                    if vocab_ratio < 0.3:
-                        logging.warning(f"Page {pdf_page_num + 1}: Possible gibberish detected (vocab ratio: {vocab_ratio:.2f})")
-
-                # Detect repeated patterns that might indicate model confusion
-                if len(cleaned) > 100:
-                    for pattern_len in (50, 100):
-                        if len(cleaned) >= pattern_len * 3:
-                            pattern = cleaned[:pattern_len]
-                            if cleaned.count(pattern) >= 3:
-                                logging.warning(f"Page {pdf_page_num + 1}: Detected repeated pattern, possible model error")
-                                break
-
-                # Warn on excessively long responses
-                if len(cleaned) > 50000:
-                    logging.warning(f"Page {pdf_page_num + 1}: Very long VLM response: {len(cleaned)} chars, consider truncation")
-
-                width, height = orig_width, orig_height
-                all_docs.append((
-                    cleaned,
-                    f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{width / zoomin:.1f}\t{0.0:.1f}\t{height / zoomin:.1f}##"
-                ))
-            except Exception as e:
-                logging.error(f"Page {pdf_page_num + 1}: Processing failed: {e}")
-                # Add fallback entry instead of crashing whole document
-                all_docs.append((
-                    f"[Page {pdf_page_num + 1}: Processing error - {str(e)[:100]}]",
-                    f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{orig_width / zoomin:.1f}\t{0.0:.1f}\t{orig_height / zoomin:.1f}##"
-                ))
-                # continue to next page
-                continue
         return all_docs, []
-
 
 if __name__ == "__main__":
     pass

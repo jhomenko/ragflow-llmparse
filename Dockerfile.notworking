@@ -1,0 +1,165 @@
+# One-stage build to avoid cross-stage PYTHONPATH/site-packages drift.
+FROM intel/intel-extension-for-pytorch:2.8.10-xpu
+USER root
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+# ---- Build args / env toggles ------------------------------------------------
+ARG NEED_MIRROR=0
+ARG LIGHTEN=0
+ENV LIGHTEN=${LIGHTEN}
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+ENV PATH=/root/.local/bin:$PATH
+
+WORKDIR /ragflow
+
+# ---- Models / resources ------------------------------------------------------
+RUN mkdir -p /ragflow/rag/res/deepdoc /root/.ragflow
+RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/huggingface.co,target=/huggingface.co \
+    cp /huggingface.co/InfiniFlow/huqie/huqie.txt.trie /ragflow/rag/res/ && \
+    tar --exclude='.*' -cf - \
+        /huggingface.co/InfiniFlow/text_concat_xgb_v1.0 \
+        /huggingface.co/InfiniFlow/deepdoc \
+        | tar -xf - --strip-components=3 -C /ragflow/rag/res/deepdoc
+RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/huggingface.co,target=/huggingface.co \
+    if [ "$LIGHTEN" != "1" ]; then \
+      tar -cf - \
+        /huggingface.co/BAAI/bge-large-zh-v1.5 \
+        /huggingface.co/maidalun1020/bce-embedding-base_v1 \
+        | tar -xf - --strip-components=2 -C /root/.ragflow; \
+    fi
+
+# Tika bits
+RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/,target=/deps \
+    cp -r /deps/nltk_data /root/ && \
+    cp /deps/tika-server-standard-3.0.0.jar /deps/tika-server-standard-3.0.0.jar.md5 /ragflow/ && \
+    cp /deps/cl100k_base.tiktoken /ragflow/9b5ad71b2ce5302211f9c61530b329a4922fc6a4
+ENV TIKA_SERVER_JAR="file:///ragflow/tika-server-standard-3.0.0.jar"
+
+# ---- System packages ---------------------------------------------------------
+# +++ Added python3.11-dev, libdatrie-dev, cython3 for PyICU/datrie builds +++
+RUN if [ "$NEED_MIRROR" = "1" ]; then \
+      sed -i 's|http://ports.ubuntu.com|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list; \
+      sed -i 's|http://archive.ubuntu.com|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list; \
+    fi && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates curl wget unzip git vim less nginx \
+      build-essential pkg-config \
+      libglib2.0-0 libglx-mesa0 libgl1 \
+      libicu-dev libgdiplus \
+      default-jdk \
+      libatk-bridge2.0-0 \
+      libgtk-4-1 libnss3 xdg-utils libgbm-dev \
+      libjemalloc-dev \
+      python3-pip pipx \
+      python3.11-dev \
+      libdatrie-dev \
+      cython3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Chrome + chromedriver
+RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/chrome-linux64-121-0-6167-85,target=/chrome-linux64.zip \
+    unzip /chrome-linux64.zip && mv chrome-linux64 /opt/chrome && ln -s /opt/chrome/chrome /usr/local/bin/
+RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/chromedriver-linux64-121-0-6167-85,target=/chromedriver-linux64.zip \
+    unzip -j /chromedriver-linux64.zip chromedriver-linux64/chromedriver && \
+    mv chromedriver /usr/local/bin/ && rm -f /usr/bin/google-chrome
+
+# libssl1.1 for aspose-slides
+RUN --mount=type=bind,from=infiniflow/ragflow_deps:latest,source=/,target=/deps \
+    case "$(uname -m)" in \
+      x86_64) dpkg -i /deps/libssl1.1_1.1.1f-1ubuntu2_amd64.deb || true ;; \
+      aarch64|arm64) dpkg -i /deps/libssl1.1_1.1.1f-1ubuntu2_arm64.deb || true ;; \
+    esac
+
+# Node 20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get purge -y nodejs npm cargo || true && \
+    apt-get autoremove -y && \
+    apt-get update && apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Rust toolchain
+RUN apt-get update && apt-get install -y build-essential && \
+    curl --proto '=https' --tlsv1.2 --http1.1 -sSf https://sh.rustup.rs | bash -s -- -y --profile minimal && \
+    echo 'export PATH="/root/.cargo/bin:${PATH}"' >> /root/.bashrc
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN cargo --version && rustc --version
+
+# MS SQL ODBC driver
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    arch="$(uname -m)"; \
+    if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then \
+        ACCEPT_EULA=Y apt-get install -y unixodbc-dev msodbcsql18; \
+    else \
+        ACCEPT_EULA=Y apt-get install -y unixodbc-dev msodbcsql17; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
+
+# Optional PyPI mirror
+RUN if [ "$NEED_MIRROR" = "1" ]; then \
+      pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && \
+      pip3 config set global.trusted-host mirrors.aliyun.com; \
+    fi
+
+# Poetry + export plugin
+RUN pipx install "poetry==1.8.3" && pipx inject poetry poetry-plugin-export
+RUN poetry config virtualenvs.create false
+
+# ---- Project files for dependency resolution --------------------------------
+COPY pyproject.toml /ragflow/pyproject.toml
+
+# Pre-install Intel XPU stack so it doesn’t get overridden
+RUN python -m pip install --no-cache-dir \
+      torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+      --index-url https://download.pytorch.org/whl/xpu && \
+    python -m pip install --no-cache-dir \
+      intel-extension-for-pytorch==2.8.10+xpu oneccl_bind_pt==2.8.0+xpu \
+      --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu/us/ && \
+    python -m pip install --no-cache-dir setuptools wheel
+
+# Export deps and install with pip (no venv)
+RUN if [ "$LIGHTEN" = "1" ]; then \
+      poetry export -f requirements.txt --without-hashes --without full -o /tmp/requirements.txt; \
+    else \
+      poetry export -f requirements.txt --without-hashes --with full -o /tmp/requirements.txt; \
+    fi && \
+    python -m pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Verify previously-missing modules
+RUN python - <<'PY'
+import sys
+print("Python:", sys.version)
+import beartype, json_repair
+print("beartype:", getattr(beartype, "__version__", "unknown"))
+print("json_repair OK")
+PY
+
+# ---- App code & web build ---------------------------------------------------
+COPY web web
+COPY docs docs
+RUN cd web && npm install && npm run build
+
+COPY api api
+COPY conf conf
+COPY deepdoc deepdoc
+COPY rag rag
+COPY agent agent
+COPY graphrag graphrag
+COPY agentic_reasoning agentic_reasoning
+COPY mcp mcp
+COPY docker/service_conf.yaml.template ./conf/service_conf.yaml.template
+COPY docker/entrypoint.sh ./
+RUN chmod +x ./entrypoint*.sh
+
+# Version stamp
+COPY .git /ragflow/.git
+RUN version_info=$(git describe --tags --match=v* --first-parent --always || echo "v0"); \
+    if [ "$LIGHTEN" = "1" ]; then version_info="$version_info slim"; else version_info="$version_info full"; fi; \
+    echo "$version_info" > /ragflow/VERSION && cat /ragflow/VERSION
+
+ENV PYTHONPATH=/ragflow/
+ENTRYPOINT ["./entrypoint.sh"]

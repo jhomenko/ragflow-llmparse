@@ -17,6 +17,7 @@ import json
 import os
 import random
 from functools import partial
+import logging
 
 import trio
 import numpy as np
@@ -29,7 +30,9 @@ from api.db.services.llm_service import LLMBundle
 from api.utils import get_uuid
 from api.utils.base64_image import image2id
 from deepdoc.parser import ExcelParser
+from deepdoc.parser.mineru_parser import MinerUParser
 from deepdoc.parser.pdf_parser import PlainParser, RAGFlowPdfParser, VisionParser
+from deepdoc.parser.tcadp_parser import TCADPParser
 from rag.app.naive import Docx
 from rag.flow.base import ProcessBase, ProcessParamBase
 from rag.flow.parser.schema import ParserFromUpstream
@@ -73,7 +76,7 @@ class ParserParam(ProcessParamBase):
 
         self.setups = {
             "pdf": {
-                "parse_method": "deepdoc",  # deepdoc/plain_text/vlm
+                "parse_method": "deepdoc",  # deepdoc/plain_text/tcadp_parser/vlm
                 "lang": "Chinese",
                 "suffix": [
                     "pdf",
@@ -138,9 +141,16 @@ class ParserParam(ProcessParamBase):
                     "oggvorbis",
                     "ape"
                 ],
-                "output_format": "json",
+                "output_format": "text",
             },
-            "video": {},
+            "video": {
+                "suffix":[
+                    "mp4",
+                    "avi",
+                    "mkv"
+                ],
+                "output_format": "text",
+            },
         }
 
     def check(self):
@@ -149,7 +159,7 @@ class ParserParam(ProcessParamBase):
             pdf_parse_method = pdf_config.get("parse_method", "")
             self.check_empty(pdf_parse_method, "Parse method abnormal.")
 
-            if pdf_parse_method.lower() not in ["deepdoc", "plain_text"]:
+            if pdf_parse_method.lower() not in ["deepdoc", "plain_text", "mineru", "tcadp parser"]:
                 self.check_empty(pdf_config.get("lang", ""), "PDF VLM language")
 
             pdf_output_format = pdf_config.get("output_format", "")
@@ -185,6 +195,10 @@ class ParserParam(ProcessParamBase):
         if audio_config:
             self.check_empty(audio_config.get("llm_id"), "Audio VLM")
 
+        video_config = self.setups.get("video", "")
+        if video_config:
+            self.check_empty(video_config.get("llm_id"), "Video VLM")
+
         email_config = self.setups.get("email", "")
         if email_config:
             email_output_format = email_config.get("output_format", "")
@@ -207,14 +221,443 @@ class Parser(ProcessBase):
         elif conf.get("parse_method").lower() == "plain_text":
             lines, _ = PlainParser()(blob)
             bboxes = [{"text": t} for t, _ in lines]
-        else:
-            vision_model = LLMBundle(self._canvas._tenant_id, LLMType.IMAGE2TEXT, llm_name=conf.get("parse_method"), lang=self._param.setups["pdf"].get("lang"))
-            lines, _ = VisionParser(vision_model=vision_model)(blob, callback=self.callback)
+        elif conf.get("parse_method").lower() == "mineru":
+            mineru_executable = os.environ.get("MINERU_EXECUTABLE", "mineru")
+            mineru_api = os.environ.get("MINERU_APISERVER", "http://host.docker.internal:9987")
+            pdf_parser = MinerUParser(mineru_path=mineru_executable, mineru_api=mineru_api)
+            ok, reason = pdf_parser.check_installation()
+            if not ok:
+                raise RuntimeError(f"MinerU not found or server not accessible: {reason}. Please install it via: pip install -U 'mineru[core]'.")
+
+            lines, _ = pdf_parser.parse_pdf(
+                filepath=name,
+                binary=blob,
+                callback=self.callback,
+                output_dir=os.environ.get("MINERU_OUTPUT_DIR", ""),
+                delete_output=bool(int(os.environ.get("MINERU_DELETE_OUTPUT", 1))),
+            )
             bboxes = []
             for t, poss in lines:
-                pn, x0, x1, top, bott = poss.split(" ")
-                bboxes.append({"page_number": int(pn), "x0": float(x0), "x1": float(x1), "top": float(top), "bottom": float(bott), "text": t})
+                box = {
+                    "image": pdf_parser.crop(poss, 1),
+                    "positions": [[pos[0][-1], *pos[1:]] for pos in pdf_parser.extract_positions(poss)],
+                    "text": t,
+                }
+                bboxes.append(box)
+        elif conf.get("parse_method").lower() == "tcadp parser":
+            # ADP is a document parsing tool using Tencent Cloud API
+            tcadp_parser = TCADPParser()
+            sections, _ = tcadp_parser.parse_pdf(
+                filepath=name,
+                binary=blob,
+                callback=self.callback,
+                file_type="PDF",
+                file_start_page=1,
+                file_end_page=1000
+            )
+            bboxes = []
+            for section, position_tag in sections:
+                if position_tag:
+                    # Extract position information from TCADP's position tag
+                    # Format: @@{page_number}\t{x0}\t{x1}\t{top}\t{bottom}##
+                    import re
+                    match = re.match(r"@@([0-9-]+)\t([0-9.]+)\t([0-9.]+)\t([0-9.]+)\t([0-9.]+)##", position_tag)
+                    if match:
+                        pn, x0, x1, top, bott = match.groups()
+                        bboxes.append({
+                            "page_number": int(pn.split('-')[0]),  # Take the first page number
+                            "x0": float(x0),
+                            "x1": float(x1),
+                            "top": float(top),
+                            "bottom": float(bott),
+                            "text": section
+                        })
+                    else:
+                        # If no position info, add as text without position
+                        bboxes.append({"text": section})
+                else:
+                    bboxes.append({"text": section})
+        else:
+            # Treat as a VLM model name (e.g., "Qwen2.5VL-3B")
+            import re
+            from pathlib import Path
 
+            import re
+            from pathlib import Path
+
+            parse_method = conf.get("parse_method")
+            if not parse_method:
+                logging.error("Parser._pdf: parse_method is empty, cannot use VLM parser")
+                lines = []
+            else:
+                logging.info(f"Parser._pdf: Using VLM model '{parse_method}'")
+
+                tenant_id = getattr(self._canvas, "_tenant_id", None)
+                if not tenant_id:
+                    logging.error("Parser._pdf: Missing tenant_id, cannot create LLMBundle")
+                    lines = []
+                else:
+                    vision_model = None
+                    try:
+                        vision_model = LLMBundle(
+                            tenant_id,
+                            LLMType.IMAGE2TEXT,
+                            llm_name=parse_method,
+                            lang=self._param.setups["pdf"].get("lang", "Chinese"),
+                        )
+                        if not vision_model:
+                            logging.error("Parser._pdf: LLMBundle creation returned None")
+                            lines = []
+                        elif not (hasattr(vision_model, "describe_with_prompt") or hasattr(vision_model, "describe")):
+                            logging.error("Parser._pdf: Created vision model is missing required describe methods")
+                            lines = []
+                        else:
+                            logging.debug(f"Created LLMBundle: type={LLMType.IMAGE2TEXT}, name={parse_method}, lang={conf.get('lang')}")
+                    except Exception as e:
+                        logging.exception(f"Failed to create vision model bundle for {parse_method}: {e}")
+                        lines = []
+
+                    # Load prompt (configurable)
+                    prompt_path_cfg = conf.get("vision_prompt_path")
+                    if prompt_path_cfg:
+                        prompt_path = Path(prompt_path_cfg)
+                    else:
+                        base = Path(__file__).resolve().parent.parent.parent
+                        prompt_path = base / "rag" / "prompts" / "vision_llm_describe_prompt.md"
+
+                    # Validate prompt file and read safely
+                    if not prompt_path.exists():
+                        logging.warning(f"Parser._pdf: Prompt file not found: {prompt_path}, using default prompt")
+                        prompt_text = "Transcribe this PDF page to clean Markdown."
+                    else:
+                        try:
+                            prompt_text = prompt_path.read_text(encoding="utf-8")
+                            if not prompt_text.strip():
+                                logging.warning("Parser._pdf: Prompt file is empty, using default")
+                                prompt_text = "Transcribe this PDF page to clean Markdown."
+                            logging.info(f"Parser._pdf: Loaded VLM prompt from {prompt_path}")
+                            logging.debug(f"Parser._pdf: Prompt length: {len(prompt_text)} chars")
+                        except Exception as e:
+                            logging.warning(f"Parser._pdf: Failed to read prompt at {prompt_path}: {e}")
+                            prompt_text = "Transcribe this PDF page to clean Markdown."
+
+                    # Validate blob (PDF bytes)
+                    if not blob or len(blob) < 100:
+                        logging.error(f"Invalid PDF blob: size={len(blob) if blob else 0}")
+                        lines = []
+                    else:
+                        # Only call VisionParser if vision_model is usable
+                        if vision_model and (hasattr(vision_model, "describe_with_prompt") or hasattr(vision_model, "describe")):
+                            try:
+                                zoomin_val = conf.get("zoomin", 3)
+                                # Ensure zoomin is reasonable
+                                try:
+                                    zoomin_val = int(zoomin_val)
+                                    if zoomin_val <= 0:
+                                        logging.warning(f"Parser._pdf: Invalid zoomin {zoomin_val}, using 3")
+                                        zoomin_val = 3
+                                except Exception:
+                                    logging.warning(f"Parser._pdf: Invalid zoomin type: {zoomin_val}, using 3")
+                                    zoomin_val = 3
+
+                                logging.info(f"Parser._pdf: Calling VisionParser with zoomin={zoomin_val}")
+                                vp = VisionParser(vision_model=vision_model)
+                                ret = vp(blob, callback=self.callback, zoomin=zoomin_val, prompt_text=prompt_text)
+                                # Normalize return value
+                                if isinstance(ret, tuple) and len(ret) >= 1:
+                                    lines = ret[0] or []
+                                elif isinstance(ret, list):
+                                    lines = ret
+                                else:
+                                    logging.error("Parser._pdf: VisionParser returned unexpected type, treating as empty")
+                                    lines = []
+                                logging.info(f"Parser._pdf: VisionParser returned {len(lines)} items")
+                            except Exception as e:
+                                logging.exception(f"VisionParser failed for model {parse_method}: {e}")
+                                lines = []
+                        else:
+                            logging.error("Parser._pdf: Vision model not available or missing methods; skipping VLM parsing")
+                            lines = []
+
+            # Parse returned metadata lines of format: @@<page>\t<x0>\t<x1>\t<top>\t<bottom>##
+            bboxes = []
+            meta_re = re.compile(r"@@(\d+)\t([\d.]+)\t([\d.]+)\t([\d.]+)\t([\d.]+)##")
+
+            bad_meta_count = 0
+            unexpected_format_count = 0
+            valid_pages = 0
+            empty_pages = 0
+            for item in lines or []:
+                try:
+                    # Expect each item to be (text, meta_str) or similar
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        text, meta_str = item[0], item[1]
+                    else:
+                        unexpected_format_count += 1
+                        logging.warning(f"Parser._pdf: Unexpected line item format from VisionParser: {item}")
+                        continue
+
+                    # Guard against empty text
+                    if not text or len(str(text).strip()) < 5:
+                        empty_pages += 1
+                        logging.debug(f"Parser._pdf: Empty page content in metadata: {meta_str}")
+                        text = text or "[Empty page]"
+
+                    match = meta_re.match(str(meta_str).strip())
+                    if not match:
+                        bad_meta_count += 1
+                        logging.warning(f"Parser._pdf: Bad metadata format (#{bad_meta_count}): {meta_str[:100]}")
+                        # Try to salvage page number from meta_str if possible
+                        page_match = re.search(r"@@(\d+)", str(meta_str))
+                        if page_match:
+                            try:
+                                page = int(page_match.group(1))
+                                logging.debug(f"Parser._pdf: Salvaged page number {page} from bad metadata")
+                                bboxes.append({
+                                    "page_number": page,
+                                    "x0": 0.0,
+                                    "x1": 595.0,  # fallback A4 width approximation (points)
+                                    "top": 0.0,
+                                    "bottom": 842.0,  # fallback A4 height approximation (points)
+                                    "text": text,
+                                    "layout_type": "text",
+                                })
+                            except Exception:
+                                logging.debug("Parser._pdf: Failed to salvage page number from bad metadata")
+                        continue
+
+                    page, x0, x1, top, bottom = match.groups()
+
+                    # Parse and validate numeric coordinate values
+                    try:
+                        page_num = int(page)
+                        coords = {
+                            "x0": float(x0),
+                            "x1": float(x1),
+                            "top": float(top),
+                            "bottom": float(bottom),
+                        }
+                    except (ValueError, TypeError) as e:
+                        bad_meta_count += 1
+                        logging.error(f"Parser._pdf: Failed to parse coordinates: {e} -- meta: {meta_str}")
+                        continue
+
+                    # Sanity check coordinates: swap if inverted
+                    if coords["x0"] > coords["x1"] or coords["top"] > coords["bottom"]:
+                        logging.warning(f"Parser._pdf: Page {page_num}: Invalid coordinates found, swapping where necessary: {coords}")
+                        coords["x0"], coords["x1"] = min(coords["x0"], coords["x1"]), max(coords["x0"], coords["x1"])
+                        coords["top"], coords["bottom"] = min(coords["top"], coords["bottom"]), max(coords["top"], coords["bottom"])
+
+                    # Discard obviously invalid boxes (zero area)
+                    if abs(coords["x1"] - coords["x0"]) < 1e-3 or abs(coords["bottom"] - coords["top"]) < 1e-3:
+                        bad_meta_count += 1
+                        logging.warning(f"Parser._pdf: Page {page_num}: Ignoring zero-area bbox: {coords}")
+                        continue
+
+                    valid_pages += 1
+                    bboxes.append({
+                        "page_number": page_num,
+                        "x0": coords["x0"],
+                        "x1": coords["x1"],
+                        "top": coords["top"],
+                        "bottom": coords["bottom"],
+                        "text": text,
+                        "layout_type": "text",
+                    })
+                except Exception as e:
+                    logging.exception(f"Parser._pdf: Failed to parse VisionParser line {item}: {e}")
+                    continue
+
+            logging.info(f"Parser._pdf: VLM parsing complete: {valid_pages} valid, {empty_pages} empty, {bad_meta_count} invalid metadata, {unexpected_format_count} unexpected-format")
+            
+            # Get chunking configuration
+            chunk_token_num = conf.get("chunk_token_num", 512)
+            chunking_strategy = conf.get("chunking_strategy", "auto")  # auto, page, heading, token
+            logging.info(f"Chunking strategy: {chunking_strategy}, max tokens: {chunk_token_num}")
+            
+            # Apply chunking strategy
+            final_bboxes = None
+            if chunking_strategy == "page":
+                # Keep full pages as single chunks (current behavior)
+                logging.debug("Using page-level chunking (no splitting)")
+                final_bboxes = []
+                for i, bbox in enumerate(bboxes):
+                    nb = dict(bbox)
+                    nb["chunk_index"] = 0
+                    nb["original_bbox_index"] = i
+                    final_bboxes.append(nb)
+                
+            elif chunking_strategy == "heading":
+                # Split by markdown headings
+                logging.info("Splitting by markdown headings")
+                final_bboxes = []
+                for orig_i, bbox in enumerate(bboxes):
+                    text = bbox.get("text", "")
+                    page_num = bbox.get("page_number", 1)
+                    
+                    # Split by ## headers (preserve # and ## as section markers)
+                    sections = re.split(r'(^|\n)(#{1,2} )', text, flags=re.MULTILINE)
+                    
+                    current_section = ""
+                    section_idx = 0
+                    
+                    for i, part in enumerate(sections):
+                        if re.match(r'#{1,2} ', part):
+                            # This is a header marker
+                            if current_section.strip():
+                                nb = dict(bbox)
+                                nb["text"] = current_section.strip()
+                                nb["chunk_index"] = section_idx
+                                nb["original_bbox_index"] = orig_i
+                                nb["layout_type"] = "section"
+                                final_bboxes.append(nb)
+                                section_idx += 1
+                            current_section = part  # Start new section with header
+                        else:
+                            current_section += part
+                    
+                    # Add last section
+                    if current_section.strip():
+                        nb = dict(bbox)
+                        nb["text"] = current_section.strip()
+                        nb["chunk_index"] = section_idx
+                        nb["original_bbox_index"] = orig_i
+                        nb["layout_type"] = "section"
+                        final_bboxes.append(nb)
+                
+                
+                logging.info(f"Split {len(bboxes)} pages into {len(final_bboxes)} heading-based chunks")
+                
+            elif chunking_strategy == "token":
+                # Split by token count using RAG tokenizer
+                logging.info(f"Splitting by tokens (max {chunk_token_num})")
+                
+                try:
+                    from rag.nlp import rag_tokenizer
+                    
+                    final_bboxes = []
+                    
+                    for orig_i, bbox in enumerate(bboxes):
+                        text = bbox.get("text", "")
+                        page_num = bbox.get("page_number", 1)
+                        
+                        # Tokenize and chunk
+                        chunks = rag_tokenizer.chunk(text, chunk_token_num)
+                        
+                        for i, chunk_text in enumerate(chunks):
+                            nb = dict(bbox)
+                            nb["text"] = chunk_text
+                            nb["chunk_index"] = i
+                            nb["original_bbox_index"] = orig_i
+                            nb["layout_type"] = "chunk"
+                            final_bboxes.append(nb)
+                    
+                    logging.info(f"Split {len(bboxes)} pages into {len(final_bboxes)} token-based chunks")
+                    
+                except Exception as e:
+                    logging.warning(f"Failed to import rag_tokenizer: {e}, falling back to page-level")
+                    final_bboxes = []
+                    for i, bbox in enumerate(bboxes):
+                        nb = dict(bbox)
+                        nb["chunk_index"] = 0
+                        nb["original_bbox_index"] = i
+                        final_bboxes.append(nb)
+            
+            else:  # auto
+                # Intelligent strategy: split by headings if present, otherwise by tokens
+                logging.info("Using auto chunking strategy")
+                
+                # Check if content has markdown headings
+                has_headings = any(
+                    re.search(r'(^|\n)#{1,3} ', bbox.get("text", ""), flags=re.MULTILINE)
+                    for bbox in bboxes
+                )
+                
+                if has_headings:
+                    logging.info("Auto: Detected headings, using heading-based splitting")
+                    final_bboxes = []
+                    for orig_i, bbox in enumerate(bboxes):
+                        text = bbox.get("text", "")
+                        sections = re.split(r'(^|\n)(#{1,2} )', text, flags=re.MULTILINE)
+                        current_section = ""
+                        section_idx = 0
+                        for i, part in enumerate(sections):
+                            if re.match(r'#{1,2} ', part):
+                                if current_section.strip():
+                                    nb = dict(bbox)
+                                    nb["text"] = current_section.strip()
+                                    nb["chunk_index"] = section_idx
+                                    nb["original_bbox_index"] = orig_i
+                                    nb["layout_type"] = "section"
+                                    final_bboxes.append(nb)
+                                    section_idx += 1
+                                current_section = part
+                            else:
+                                current_section += part
+                        if current_section.strip():
+                            nb = dict(bbox)
+                            nb["text"] = current_section.strip()
+                            nb["chunk_index"] = section_idx
+                            nb["original_bbox_index"] = orig_i
+                            nb["layout_type"] = "section"
+                            final_bboxes.append(nb)
+                else:
+                    logging.info("Auto: No headings detected, checking page sizes")
+                    # Check if any page exceeds token limit
+                    try:
+                        from rag.nlp import rag_tokenizer
+                        
+                        needs_splitting = False
+                        for bbox in bboxes:
+                            text = bbox.get("text", "")
+                            token_count = rag_tokenizer.num_tokens(text)
+                            if token_count > chunk_token_num:
+                                needs_splitting = True
+                                logging.debug(f"Page {bbox.get('page_number')} has {token_count} tokens (>{chunk_token_num})")
+                                break
+                        
+                        if needs_splitting:
+                            logging.info("Auto: Pages exceed token limit, using token-based splitting")
+                            final_bboxes = []
+                            for orig_i, bbox in enumerate(bboxes):
+                                text = bbox.get("text", "")
+                                chunks = rag_tokenizer.chunk(text, chunk_token_num)
+                                for i, chunk_text in enumerate(chunks):
+                                    nb = dict(bbox)
+                                    nb["text"] = chunk_text
+                                    nb["chunk_index"] = i
+                                    nb["original_bbox_index"] = orig_i
+                                    nb["layout_type"] = "chunk"
+                                    final_bboxes.append(nb)
+                        else:
+                            logging.info("Auto: Pages within token limit, using page-level chunks")
+                            final_bboxes = []
+                            for i, bbox in enumerate(bboxes):
+                                nb = dict(bbox)
+                                nb["chunk_index"] = 0
+                                nb["original_bbox_index"] = i
+                                final_bboxes.append(nb)
+                                
+                    except Exception:
+                        logging.warning("Cannot check token counts, using page-level chunks")
+                        final_bboxes = []
+                        for i, bbox in enumerate(bboxes):
+                            nb = dict(bbox)
+                            nb["chunk_index"] = 0
+                            nb["original_bbox_index"] = i
+                            final_bboxes.append(nb)
+                # Replace bboxes with chunked version
+                bboxes = final_bboxes or bboxes
+                # Sort by: page → column → top coordinate → original creation order (original_bbox_index)
+                bboxes = sorted(bboxes, key=lambda x: (
+                    x.get("page_number", 1),
+                    x.get("col_id", 0),
+                    x.get("top", 0.0),
+                    x.get("original_bbox_index", 0)
+                ))
+                logging.info(f"Final bbox count after chunking: {len(bboxes)}")
+            
+        
         if conf.get("output_format") == "json":
             self.set_output("json", bboxes)
         if conf.get("output_format") == "markdown":
@@ -357,6 +800,17 @@ class Parser(ProcessBase):
 
             self.set_output("text", txt)
 
+    def _video(self, name, blob):
+        self.callback(random.randint(1, 5) / 100.0, "Start to work on an video.")
+
+        conf = self._param.setups["video"]
+        self.set_output("output_format", conf["output_format"])
+
+        cv_mdl = LLMBundle(self._canvas.get_tenant_id(), LLMType.IMAGE2TEXT, llm_name=conf["llm_id"])
+        txt = cv_mdl.chat(system="", history=[], gen_conf={}, video_bytes=blob, filename=name)
+
+        self.set_output("text", txt)
+
     def _email(self, name, blob):
         self.callback(random.randint(1, 5) / 100.0, "Start to work on an email.")
 
@@ -385,14 +839,27 @@ class Parser(ProcessBase):
             if "body" in target_fields:
                 body_text, body_html = [], []
                 def _add_content(m, content_type):
+                    def _decode_payload(payload, charset, target_list):
+                        try:
+                            target_list.append(payload.decode(charset))
+                        except (UnicodeDecodeError, LookupError):
+                            for enc in ["utf-8", "gb2312", "gbk", "gb18030", "latin1"]:
+                                try:
+                                    target_list.append(payload.decode(enc))
+                                    break
+                                except UnicodeDecodeError:
+                                    continue
+                            else:
+                                target_list.append(payload.decode("utf-8", errors="ignore"))
+
                     if content_type == "text/plain":
-                        body_text.append(
-                            m.get_payload(decode=True).decode(m.get_content_charset())
-                        )
+                        payload = msg.get_payload(decode=True)
+                        charset = msg.get_content_charset() or "utf-8"
+                        _decode_payload(payload, charset, body_text)
                     elif content_type == "text/html":
-                        body_html.append(
-                            m.get_payload(decode=True).decode(m.get_content_charset())
-                        )
+                        payload = msg.get_payload(decode=True)
+                        charset = msg.get_content_charset() or "utf-8"
+                        _decode_payload(payload, charset, body_html)
                     elif "multipart" in content_type:
                         if m.is_multipart():
                             for part in m.iter_parts():
@@ -483,6 +950,7 @@ class Parser(ProcessBase):
             "word": self._word,
             "image": self._image,
             "audio": self._audio,
+            "video": self._video,
             "email": self._email,
         }
         try:

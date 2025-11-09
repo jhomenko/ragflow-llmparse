@@ -514,3 +514,146 @@ if __name__ == '__main__':
             break
         logging.info(tknzr.tokenize(line))
     of.close()
+
+# --- Added: lightweight token-count and chunk utilities to support parser VLM chunking ---
+from rag.utils import num_tokens_from_string as _num_tokens_from_string
+
+def _num_tokens(text: str) -> int:
+    """Return token count using shared utility with a safe fallback."""
+    try:
+        if text is None:
+            return 0
+        return int(_num_tokens_from_string(text))
+    except Exception:
+        # fallback heuristic: approximate tokens by words or characters
+        try:
+            words = len(str(text).split())
+            if words > 0:
+                return words
+        except Exception:
+            pass
+        return max(0, len(str(text)) // 4)
+
+def _chunk(text: str, max_tokens: int = 512) -> list[str]:
+    """
+    Chunk text into pieces each up to max_tokens (best-effort).
+    - Prefer splitting on line boundaries.
+    - Try to keep markdown/html table blocks together when possible.
+    - If a single table block is larger than max_tokens, split by rows.
+    """
+    if not text:
+        return []
+
+    # Normalize and split into lines
+    lines = text.splitlines()
+    chunks = []
+    cur_lines = []
+    cur_tokens = 0
+
+    i = 0
+    L = len(lines)
+    while i < L:
+        line = lines[i].rstrip()
+
+        # Detect table-like blocks: markdown tables (multiple '|') or html table tags
+        is_table_line = (line.count("|") >= 2) or ("<table" in line.lower()) or ("</table" in line.lower())
+
+        if is_table_line:
+            # Collect continuous table block
+            tbl_lines = []
+            while i < L:
+                l = lines[i].rstrip()
+                if l.count("|") >= 2 or ("<table" in l.lower()) or ("</table" in l.lower()):
+                    tbl_lines.append(l)
+                    i += 1
+                else:
+                    break
+
+            tbl_text = "\n".join(tbl_lines)
+            tbl_tokens = _num_tokens(tbl_text)
+
+            if tbl_tokens > max_tokens:
+                # Split table by rows into multiple chunks (best-effort)
+                row_chunks = []
+                row_cur = []
+                row_tokens = 0
+                for r in tbl_lines:
+                    rt = _num_tokens(r)
+                    if row_tokens + rt > max_tokens and row_cur:
+                        row_chunks.append("\n".join(row_cur))
+                        row_cur = [r]
+                        row_tokens = rt
+                    else:
+                        row_cur.append(r)
+                        row_tokens += rt
+                if row_cur:
+                    row_chunks.append("\n".join(row_cur))
+
+                # flush current paragraph if exists
+                if cur_lines:
+                    chunks.append("\n".join(cur_lines).strip())
+                    cur_lines = []
+                    cur_tokens = 0
+
+                for rc in row_chunks:
+                    if rc.strip():
+                        chunks.append(rc.strip())
+            else:
+                # Keep table as one block if fits
+                if cur_tokens + tbl_tokens > max_tokens and cur_lines:
+                    chunks.append("\n".join(cur_lines).strip())
+                    cur_lines = []
+                    cur_tokens = 0
+                cur_lines.append(tbl_text)
+                cur_tokens += tbl_tokens
+            continue  # already advanced i inside table collection
+
+        # Non-table line: treat as paragraph/line unit
+        line_tokens = _num_tokens(line)
+
+        # If this single line itself exceeds max_tokens, flush current then append this line as its own chunk split by half (fallback)
+        if line_tokens > max_tokens:
+            if cur_lines:
+                chunks.append("\n".join(cur_lines).strip())
+                cur_lines = []
+                cur_tokens = 0
+            # naive split long line by characters into approximate halves
+            text_len = len(line)
+            approx_parts = max(1, (line_tokens // max_tokens))
+            part_size = max(1, text_len // approx_parts)
+            start = 0
+            while start < text_len:
+                part = line[start:start + part_size]
+                chunks.append(part.strip())
+                start += part_size
+            i += 1
+            continue
+
+        # Normal accumulation
+        if cur_tokens + line_tokens <= max_tokens or not cur_lines:
+            cur_lines.append(line)
+            cur_tokens += line_tokens
+            i += 1
+        else:
+            # flush and start new chunk
+            chunks.append("\n".join(cur_lines).strip())
+            cur_lines = []
+            cur_tokens = 0
+
+    if cur_lines:
+        chunks.append("\n".join(cur_lines).strip())
+
+    # filter empties
+    return [c for c in chunks if c and c.strip()]
+
+# Export convenience names used by parser
+num_tokens = _num_tokens
+chunk = _chunk
+
+# Ensure these symbols are available in module exports (keeps existing bottom aliases compatible)
+try:
+    # if module-level alias block exists later, these assignments will be overridden but harmless
+    globals()["num_tokens"] = num_tokens
+    globals()["chunk"] = chunk
+except Exception:
+    pass

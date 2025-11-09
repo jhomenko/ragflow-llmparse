@@ -65,7 +65,12 @@ RUN --mount=type=cache,id=ragflow_apt,target=/var/cache/apt,sharing=locked \
 RUN if [ "$NEED_MIRROR" == "1" ]; then \
         pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple && \
         pip3 config set global.trusted-host mirrors.aliyun.com; \
-    fi
+        mkdir -p /etc/uv && \
+        echo "[[index]]" > /etc/uv/uv.toml && \
+        echo 'url = "https://mirrors.aliyun.com/pypi/simple"' >> /etc/uv/uv.toml && \
+        echo "default = true" >> /etc/uv/uv.toml; \
+    fi; \
+    pipx install uv
 
 ENV PYTHONDONTWRITEBYTECODE=1 DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 ENV PATH=/root/.local/bin:$PATH
@@ -139,22 +144,41 @@ USER root
 
 WORKDIR /ragflow
 
-# Install Python dependencies from requirements files
-COPY requirements.txt requirements-extras.txt ./
+# install dependencies from uv.lock file
+COPY pyproject.toml uv.lock ./
 
-# Use pip to install system-wide dependencies (no virtualenv)
+# Configure UV to use system Python (no venv)
+ENV UV_SYSTEM_PYTHON=1
 
-# Configure package index failover logic via shell if necessary
-# Detect Python version and install dependencies accordingly
-# Install Python dependencies using pip
-RUN --mount=type=cache,id=ragflow_pip,target=/root/.cache/pip,sharing=locked \
-    pip3 install --no-cache-dir -r requirements.txt && \
-    if [ "$LIGHTEN" != "1" ]; then \
-        pip3 install --no-cache-dir -r requirements-extras.txt; \
+# https://github.com/astral-sh/uv/issues/10462
+# uv records index url into uv.lock but doesn't failover among multiple indexes
+# Detect Python version and sync dependencies to system
+RUN --mount=type=cache,id=ragflow_uv,target=/root/.cache/uv,sharing=locked \
+    PYTHON_VERSION=$(python3 --version | grep -oP '3\.\d+') && \
+    echo "Using Python $PYTHON_VERSION for UV sync" && \
+    if [ "$NEED_MIRROR" == "1" ]; then \
+        sed -i 's|pypi.org|mirrors.aliyun.com/pypi|g' uv.lock; \
+    else \
+        sed -i 's|mirrors.aliyun.com/pypi|pypi.org|g' uv.lock; \
+    fi; \
+    if [ "$LIGHTEN" == "1" ]; then \
+        echo "Running UV sync (LIGHTEN mode)..." && \
+        uv sync --python $PYTHON_VERSION --frozen --no-install-project -v; \
+    else \
+        echo "Running UV sync (full mode with all extras)..." && \
+        uv sync --python $PYTHON_VERSION --frozen --all-extras --no-install-project -v; \
     fi && \
-    # Verify critical application dependencies were installed
+    echo "UV sync completed. Checking installed packages..." && \
+    python3 -m pip list | head -20 && \
+    echo "Copying UV virtualenv packages to system site-packages (if present)..." && \
+    PY_SITE=/usr/local/lib/python$PYTHON_VERSION/dist-packages && \
+    mkdir -p $PY_SITE && \
+    if [ -d /ragflow/.venv ]; then \
+        cp -a /ragflow/.venv/lib/python$PYTHON_VERSION/site-packages/* $PY_SITE/ || true; \
+    fi && \
+    # Verify critical application dependencies were installed by UV (now available in system site-packages) && \
     python3 -c "import beartype; import json_repair; print('✅ Application dependencies installed')" && \
-    # Verify Intel PyTorch is still accessible from base image
+    # Verify Intel PyTorch is accessible
     python3 -c "import torch; print(f'PyTorch version: {torch.__version__}'); import intel_extension_for_pytorch as ipex; print(f'IPEX version: {ipex.__version__}')"
 
 COPY web web
@@ -180,7 +204,7 @@ USER root
 WORKDIR /ragflow
 
 # Copy system Python packages from builder
-# Intel PyTorch packages are already in base image; builder installs additional dependencies via pip
+# Intel PyTorch packages are already in base image, UV installed additional deps to system
 # Copy system Python packages from builder (use dist-packages which actually exists)
 COPY --from=builder /usr/local/lib/python3.11/dist-packages /usr/local/lib/python3.11/dist-packages
 COPY --from=builder /usr/lib/python3/dist-packages /usr/lib/python3/dist-packages
@@ -203,19 +227,12 @@ COPY rag rag
 COPY agent agent
 COPY graphrag graphrag
 COPY agentic_reasoning agentic_reasoning
-COPY requirements.txt requirements-extras.txt ./
+COPY pyproject.toml uv.lock ./
 COPY mcp mcp
 COPY plugin plugin
 
 COPY docker/service_conf.yaml.template ./conf/service_conf.yaml.template
 COPY docker/entrypoint.sh ./
-COPY docker/nginx /ragflow/docker/nginx
-
-RUN cp /ragflow/docker/nginx/nginx.conf /etc/nginx/nginx.conf && \
-    cp /ragflow/docker/nginx/ragflow.conf /etc/nginx/conf.d/ragflow.conf && \
-    cp /ragflow/docker/nginx/proxy.conf /etc/nginx/proxy.conf && \
-    rm -f /etc/nginx/sites-enabled/default
-
 RUN chmod +x ./entrypoint*.sh
 
 # Copy compiled web pages

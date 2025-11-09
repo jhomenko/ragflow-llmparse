@@ -17,7 +17,6 @@
 import io
 import re
 import logging
-import os
 
 import numpy as np
 from PIL import Image
@@ -28,36 +27,7 @@ from deepdoc.vision import OCR
 from rag.nlp import tokenize
 from rag.utils import clean_markdown_block
 from rag.nlp import rag_tokenizer
-from rag.llm.working_vlm_module import describe_image_working
 
-
-def extract_base_model_name(full_model_name):
-    """
-    Extract base model name from RAGFlow's composite model format.
-
-    RAGFlow stores models as: {model_name}___{provider}@{api_type}
-    Example: "Qwen2.5VL-3B___OpenAI-API@OpenAI-API-Compatible"
-
-    This function returns just the base model name: "Qwen2.5VL-3B"
-
-    Args:
-        full_model_name: Full model name from LLMBundle
-
-    Returns:
-        Base model name (everything before '___')
-    """
-    if not full_model_name:
-        logging.info("extract_base_model_name: received empty or None model name, returning 'unknown'")
-        return "unknown"
-
-    # Split on '___' and take first part
-    if "___" in full_model_name:
-        base_name = full_model_name.split("___")[0]
-        logging.info(f"Extracted base model name: '{base_name}' from '{full_model_name}'")
-        return base_name
-
-    # No separator found, return as-is
-    return full_model_name
 
 ocr = OCR()
 
@@ -156,79 +126,6 @@ def vision_llm_chunk(binary, vision_model, prompt=None, callback=None):
     prompt = prompt or ""
     logging.debug(f"vision_llm_chunk: binary size={len(binary)} bytes, prompt length={len(prompt or '')}")
 
-    # Attempt to use the working VLM module first (controlled by env var)
-    use_working_module = os.getenv("USE_WORKING_VLM", "true").lower() == "true"
-    full_model_name = getattr(vision_model, "llm_name", None) or getattr(vision_model, "name", None) or "unknown"
-    model_name = extract_base_model_name(full_model_name)
-
-    if use_working_module:
-        logging.info(f"vision_llm_chunk: Using working VLM module: model={model_name}")
-        try:
-            prompt_for_working = prompt or ""
-            res = describe_image_working(image_bytes=binary, prompt=prompt_for_working, model_name=model_name)
-
-            text = None
-            token_count = None
-            if isinstance(res, tuple):
-                if len(res) >= 1:
-                    text = res[0]
-                if len(res) >= 2:
-                    token_count = res[1]
-            else:
-                text = res
-
-            # Normalize response
-            if text is None:
-                logging.warning("vision_llm_chunk: working_vlm returned None, treating as empty")
-                text = ""
-            if not isinstance(text, str):
-                try:
-                    text = str(text)
-                except Exception:
-                    text = ""
-
-            # Clean markdown fences and whitespace
-            text = clean_markdown_block(text).strip()
-    
-            # Validate markdown formatting
-            has_markdown = any([
-                '**' in text,                      # bold
-                ('*' in text and '**' not in text),# italic (not bold)
-                '`' in text,                       # code
-                text.strip().startswith('#'),      # headings
-                '|' in text,                       # tables
-            ])
-    
-            if not has_markdown and len(text) > 100:
-                logging.warning("⚠️ VLM response lacks markdown formatting - may need prompt adjustment")
-                logging.warning(f"Preview: {text[:200]}")
-    
-            if token_count is None:
-                token_count = 0
-            elif not isinstance(token_count, (int, float)):
-                logging.debug(f"vision_llm_chunk: Invalid token_count type from working_vlm: {type(token_count)}, setting to 0")
-                token_count = 0
-    
-            logging.info(f"Working VLM response: {len(text)} chars, {token_count} tokens")
-            logging.debug(f"Working VLM preview: {text[:200]}...")
-            try:
-                callback(0.95, f"Working VLM tokens: {token_count}, preview: {text[:128]}")
-            except Exception:
-                pass
-
-            if text:
-                return text
-            else:
-                logging.warning("vision_llm_chunk: Working VLM returned empty after cleanup, falling back to original path")
-
-        except Exception as e:
-            logging.exception("vision_llm_chunk: working VLM module failed, falling back to original VLM")
-            try:
-                callback(-1, f"working VLM module error: {e}")
-            except Exception:
-                pass
-
-    # Fallback: original vision_model code path
     try:
         # Log model being used (best-effort)
         model_name = getattr(vision_model, "llm_name", None) or getattr(vision_model, "name", None) or "unknown"

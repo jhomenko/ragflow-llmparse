@@ -16,7 +16,6 @@
 import base64
 import json
 import os
-import logging
 from abc import ABC
 from copy import deepcopy
 from io import BytesIO
@@ -199,26 +198,13 @@ class GptV4(Base):
 
     def describe_with_prompt(self, image, prompt=None):
         b64 = self.image2base64(image)
-        
-        logging.info(f"VLM call: model={self.model_name}, max_tokens=4096, temperature=0.1, stop=[]")
-        
         res = self.client.chat.completions.create(
             model=self.model_name,
             messages=self.vision_llm_prompt(b64, prompt),
             max_tokens=4096,      # ✅ Add explicit token limit to match working test
             temperature=0.1,      # ✅ Low temperature for consistent transcription
-            stop=[],              # ✅ FIX #4: Explicitly disable default stop tokens
             extra_body=self.extra_body,
         )
-        
-        try:
-            usage_tokens = res.usage.total_tokens
-        except Exception:
-            usage_tokens = None
-        finish_reason = getattr(res.choices[0], "finish_reason", None)
-        content_len = len(res.choices[0].message.content) if getattr(res.choices[0].message, "content", None) else 0
-        logging.info(f"VLM response: tokens={usage_tokens}, finish_reason={finish_reason}, length={content_len}")
-        
         return res.choices[0].message.content.strip(), total_token_count_from_response(res)
 
 

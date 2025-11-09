@@ -145,11 +145,7 @@ full = [
     "fastembed>=0.3.6,<0.4.0; sys_platform == 'darwin' or platform_machine != 'x86_64'",
     "fastembed-gpu>=0.3.6,<0.4.0; sys_platform != 'darwin' and platform_machine == 'x86_64'",
     "flagembedding==1.2.10",
-    "torch==2.8.0",
-    "torchvision==0.23.0",
-    "torchaudio==2.8.0",
-    "intel-extension-for-pytorch==2.8.10+xpu",
-    "oneccl-bind-pt==2.8.0+xpu",
+    "torch>=2.5.0,<3.0.0",
     "transformers>=4.35.0,<5.0.0",
 ]
 
@@ -165,16 +161,6 @@ test = [
     "requests>=2.32.2",
     "requests-toolbelt>=1.0.0",
 ]
-
-[[tool.uv.index]]
-name = "pytorch-xpu"
-url = "https://download.pytorch.org/whl/xpu"
-explicit = true
-
-[[tool.uv.index]]
-name = "intel-extension"
-url = "https://pytorch-extension.intel.com/release-whl/stable/xpu/us/"
-explicit = true
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

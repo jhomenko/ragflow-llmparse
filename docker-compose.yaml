@@ -1,0 +1,178 @@
+services:
+  ragflow:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      es01:
+        condition: service_started
+    image: ${RAGFLOW_IMAGE} # From Portainer UI Env Var
+    container_name: ragflow-server
+    devices:
+      - /dev/dri:/dev/dri
+    ports:
+      - ${SVR_HTTP_PORT}:9380 # From Portainer UI Env Var
+      - 8088:80
+      - 8443:443
+      - 5678:5678
+      - 5679:5679
+      - 9382:9382
+    volumes:
+      # NFS Volume for Logs
+      - ragflow_logs_nfs:/ragflow/logs
+
+    environment:
+      # Keep all necessary environment variables for substitution
+      - TZ=${TIMEZONE}
+      - HF_ENDPOINT=${HF_ENDPOINT}
+      - MACOS=${MACOS}
+      - MYSQL_DATABASE=${MYSQL_DBNAME}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MINIO_USER=${MINIO_USER}
+      - MINIO_PASSWORD=${MINIO_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      # Add any other required ENV VARS RAGFlow expects (check its docs/defaults)
+    networks:
+      - ragflow
+      - sharednet
+    restart: on-failure
+
+  es01:
+    container_name: ragflow-es-01
+    image: elasticsearch:${STACK_VERSION} # From Portainer UI Env Var
+    volumes:
+      - ragflow_es_nfs:/usr/share/elasticsearch/data
+    environment:
+      - node.name=es01
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD} # From Portainer UI Env Var
+      - bootstrap.memory_lock=false
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - cluster.routing.allocation.disk.watermark.low=5gb
+      - cluster.routing.allocation.disk.watermark.high=3gb
+      - cluster.routing.allocation.disk.watermark.flood_stage=2gb
+      - TZ=${TIMEZONE} # From Portainer UI Env Var
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS:-"-Xms4g -Xmx4g"} # From Portainer UI Env Var or default
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - ragflow
+    restart: on-failure
+
+  mysql:
+    image: mysql:8.0.39
+    container_name: ragflow-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DBNAME}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - TZ=${TIMEZONE}
+    command: |
+      --max_connections=1000
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --tls_version="TLSv1.2,TLSv1.3"
+      --binlog_expire_logs_seconds=604800
+    volumes:
+      - ragflow_mysql_nfs:/var/lib/mysql # NFS Data volume
+      # Keep ONLY the init.sql bind mount
+#      - /opt/portainer_stacks/ragflow/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ragflow
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-uroot", "--password=${MYSQL_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    restart: on-failure
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2023-12-20T01-00-02Z
+    container_name: ragflow-minio
+    command: server --console-address ":9001" /data
+    environment:
+      - MINIO_ROOT_USER=${MINIO_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ragflow_minio_nfs:/data
+    networks:
+      - ragflow
+    restart: on-failure
+
+  redis:
+    image: valkey/valkey:8
+    container_name: ragflow-redis
+    environment:
+      - TZ=${TIMEZONE}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: 
+      - valkey-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - ragflow_redis_nfs:/data
+    networks:
+      - ragflow
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 30s # Added 60s grace period
+    restart: on-failure
+
+networks:
+  ragflow:
+    driver: bridge
+  sharednet:
+    name: llm-net
+    external: true
+
+volumes:
+  ragflow_mysql_nfs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.68.147,nfsvers=3,soft,rw
+      device: ":/export/Ragflow/mysql"
+  ragflow_minio_nfs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.68.147,nfsvers=3,soft,rw
+      device: ":/export/Ragflow/minio"
+  ragflow_redis_nfs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.68.147,nfsvers=3,soft,rw
+      device: ":/export/Ragflow/redis"
+  ragflow_es_nfs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.68.147,nfsvers=3,soft,rw
+      device: ":/export/Ragflow/elasticsearch"
+  ragflow_logs_nfs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.68.147,nfsvers=3,soft,rw
+      device: ":/export/Ragflow/logs"
