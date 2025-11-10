@@ -212,5 +212,93 @@ If VLM integration causes issues:
 - Caching of VLM results to reduce API costs
 - Performance benchmarks and optimization
 
+## VisionParser Image Resizing for VLM Models
+- **Date**: 2025-11-09
+
+### Overview
+This section documents the recently implemented VisionParser image resizing improvements that optimize images for Vision Language Models (VLMs). The changes introduce high-DPI extraction and a "smart" resize algorithm that preserves aspect ratio while aligning dimensions to a configurable factor, improving VLM compliance and overall quality.
+
+### Changes Made
+1. Added four utility functions to support factor-aligned resizing:
+   - [`round_by_factor()`](deepdoc/parser/pdf_parser.py:61)
+   - [`ceil_by_factor()`](deepdoc/parser/pdf_parser.py:66)
+   - [`floor_by_factor()`](deepdoc/parser/pdf_parser.py:71)
+   - [`smart_resize()`](deepdoc/parser/pdf_parser.py:76)
+   - Location: [`deepdoc/parser/pdf_parser.py:61-76`](deepdoc/parser/pdf_parser.py:61)
+
+2. Increased extraction DPI for better VLM input quality:
+   - Modified [`VisionParser.__images__`](deepdoc/parser/pdf_parser.py:1422)
+   - Changed `resolution=72 * zoomin` (≈216 DPI typical) to `resolution=600` for high-DPI extraction.
+
+3. Replaced prior max-2000px resize logic with smart resizing and environment configuration:
+   - Updated [`VisionParser.__call__`](deepdoc/parser/pdf_parser.py:1499-1515)
+   - Replaced simple max-2000px clamp with a call to [`smart_resize()`](deepdoc/parser/pdf_parser.py:76)
+   - Introduced `VLM_RESIZE_FACTOR` environment variable (default: 32)
+   - New target max dimension set to 1024px, and dimensions are now multiples of the configured factor.
+
+### Key Features
+- High DPI extraction (600 DPI) for improved VLM image fidelity.
+- Smart resize that aligns output dimensions to a configurable factor (e.g., 32).
+- Environment variable configurability for resize behavior.
+- Target maximum dimension: 1024px (instead of previous 2000px).
+- Preservation of original aspect ratio during resizing.
+
+### Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| VLM_RESIZE_FACTOR | 32 | The alignment factor (pixels) used so final width/height are multiples of this value. Adjust to match VLM model requirements. |
+
+### Benefits
+- VLM compliance: image dimensions and formats are better aligned with model expectations.
+- Better quality: high-DPI extraction plus controlled resizing preserves visual detail important for VLM understanding.
+- Faster processing: smaller, factor-aligned images reduce downstream processing and network payload sizes compared to unnecessarily large images.
+
+### Configuration Examples
+Bash examples to set desired resize factor before starting the service:
+
+```bash
+# Use default (32)
+export VLM_RESIZE_FACTOR=32
+
+# Use 16 for smaller alignment granularity
+export VLM_RESIZE_FACTOR=16
+
+# Use 64 for coarser alignment (potentially faster but less precise)
+export VLM_RESIZE_FACTOR=64
+```
+
+### Technical Details (smart_resize algorithm)
+- Input: original image width (w) and height (h), max dimension target (1024), and alignment factor (F; default 32).
+- Compute scale to fit the largest dimension to <= 1024 while preserving aspect ratio:
+  - scale = min(1.0, 1024 / max(w, h))
+  - new_w = floor(w * scale), new_h = floor(h * scale)
+- Align each dimension to the nearest valid value using factor helpers:
+  - new_w_aligned = max(F, round_by_factor(new_w, F))
+  - new_h_aligned = max(F, round_by_factor(new_h, F))
+- Ensure multiples of F (using `ceil_by_factor` or `floor_by_factor` where appropriate) to conform to VLM memory/stride expectations.
+- Returns a resized image with preserved aspect ratio and dimensions that are multiples of the configured factor.
+
+Utility functions added:
+- [`round_by_factor()`](deepdoc/parser/pdf_parser.py:61): round a number to nearest multiple of factor.
+- [`ceil_by_factor()`](deepdoc/parser/pdf_parser.py:66): ceil to nearest multiple.
+- [`floor_by_factor()`](deepdoc/parser/pdf_parser.py:71): floor to nearest multiple.
+- [`smart_resize()`](deepdoc/parser/pdf_parser.py:76): performs the full algorithm described above.
+
+### Testing Recommendations
+- Verify DPI extraction:
+  - Confirm images extracted from PDF use `resolution=600` at [`deepdoc/parser/pdf_parser.py:1422`](deepdoc/parser/pdf_parser.py:1422).
+- Validate resize behavior:
+  - Test images with extreme aspect ratios (very wide, very tall).
+  - Confirm largest dimension ≤ 1024 and both width/height are multiples of `VLM_RESIZE_FACTOR`.
+  - Check results for several `VLM_RESIZE_FACTOR` values (16, 32, 64).
+- Quality checks:
+  - Compare VLM outputs (accuracy, character counts) before/after changes using representative PDFs.
+  - Ensure VLM no longer drops content because of inappropriate image sizes.
+- Performance:
+  - Measure end-to-end processing time and payload sizes with typical documents.
+  - Ensure throughput improvements or acceptable trade-offs when using 600 DPI.
+- Regression:
+  - Confirm no regressions for prior image-format conversion bug fixes (JPEG bytes conversion still in place at [`deepdoc/parser/pdf_parser.py:1438-1473`](deepdoc/parser/pdf_parser.py:1438)).
+
 ## Conclusion
 The VLM implementation successfully addresses all critical issues preventing PDF parsing from working correctly. The system now reliably processes PDFs using Vision Language Models, providing enhanced document processing capabilities with improved accuracy for documents containing images, charts, and complex layouts.

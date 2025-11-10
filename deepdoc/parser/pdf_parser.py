@@ -58,6 +58,56 @@ if LOCK_KEY_pdfplumber not in sys.modules:
     sys.modules[LOCK_KEY_pdfplumber] = threading.Lock()
 
 
+def round_by_factor(number: int, factor: int) -> int:
+    """Returns the closest integer to 'number' that is divisible by 'factor'."""
+    return round(number / factor) * factor
+
+
+def ceil_by_factor(number: int, factor: int) -> int:
+    """Returns the smallest integer greater than or equal to 'number' that is divisible by 'factor'."""
+    return math.ceil(number / factor) * factor
+
+
+def floor_by_factor(number: int, factor: int) -> int:
+    """Returns the largest integer less than or equal to 'number' that is divisible by 'factor'."""
+    return math.floor(number / factor) * factor
+
+
+def smart_resize(height: int, width: int, factor: int = 32, target_max_dimension: int = 1024) -> tuple[int, int]:
+    """
+    Rescales the image so that the following conditions are met:
+    1. Both dimensions (height and width) are divisible by 'factor'.
+    2. The longest dimension does not exceed 'target_max_dimension'.
+    3. The aspect ratio of the image is maintained as closely as possible.
+    """
+    # Determine the current longest dimension
+    max_dimension = max(height, width)
+    
+    # Calculate scale to fit within target_max_dimension
+    scale = target_max_dimension / max_dimension
+    
+    # Calculate new dimensions while preserving aspect ratio
+    new_height = int(height * scale)
+    new_width = int(width * scale)
+    
+    # Ensure both dimensions are divisible by the factor
+    adjusted_height = round_by_factor(new_height, factor)
+    adjusted_width = round_by_factor(new_width, factor)
+    
+    # Final check to ensure we don't exceed target_max_dimension after rounding
+    if max(adjusted_height, adjusted_width) > target_max_dimension:
+        # If rounding pushed us over the limit, reduce slightly
+        final_scale = (target_max_dimension - factor) / max(new_height, new_width)
+        adjusted_height = round_by_factor(int(height * final_scale), factor)
+        adjusted_width = round_by_factor(int(width * final_scale), factor)
+    
+    # Ensure minimum size is at least the factor to avoid zero or very small dimensions
+    adjusted_height = max(adjusted_height, factor)
+    adjusted_width = max(adjusted_width, factor)
+    
+    return adjusted_height, adjusted_width
+
+
 class RAGFlowPdfParser:
     def __init__(self, **kwargs):
         """
@@ -1367,7 +1417,9 @@ class VisionParser(RAGFlowPdfParser):
         try:
             with sys.modules[LOCK_KEY_pdfplumber]:
                 self.pdf = pdfplumber.open(fnm) if isinstance(fnm, str) else pdfplumber.open(BytesIO(fnm))
-                self.page_images = [p.to_image(resolution=72 * zoomin).annotated for i, p in enumerate(self.pdf.pages[page_from:page_to])]
+                # Extract images at high DPI (600) to ensure high quality for VLM processing
+                high_dpi = 600
+                self.page_images = [p.to_image(resolution=high_dpi).annotated for i, p in enumerate(self.pdf.pages[page_from:page_to])]
                 self.total_page = len(self.pdf.pages)
         except Exception:
             self.page_images = None
@@ -1444,13 +1496,21 @@ class VisionParser(RAGFlowPdfParser):
                 # Convert to RGB
                 img = img_pil.convert("RGB")
 
-                # Resize if longest side > 2000px (maintain aspect ratio)
-                max_side = max(img.size)
-                if max_side > 2000:
-                    scale = 2000.0 / max_side
-                    new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
-                    img = img.resize(new_size, resample=Image.Resampling.LANCZOS)
-                    logging.debug(f"VisionParser: Page {idx+1}: Resized to {img.size[0]}x{img.size[1]}")
+                # Get resize factor from environment variable or default to 32
+                resize_factor = int(os.getenv("VLM_RESIZE_FACTOR", "32"))
+                
+                # Apply smart_resize to ensure dimensions are multiples of the factor
+                # and maintain proper aspect ratio with max 1024 on the long dimension
+                width, height = img.size
+                target_height, target_width = smart_resize(
+                    height, width,
+                    factor=resize_factor,
+                    target_max_dimension=1024  # Balanced resolution for general use
+                )
+                
+                # Resize the image to the calculated dimensions
+                img = img.resize((target_width, target_height), resample=Image.Resampling.LANCZOS)
+                logging.debug(f"VisionParser: Page {idx+1}: Resized from {width}x{height} to {target_width}x{target_height} (factor={resize_factor})")
 
                 # Convert to JPEG bytes
                 buf = io.BytesIO()
