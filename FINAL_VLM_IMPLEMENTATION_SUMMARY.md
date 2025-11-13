@@ -302,3 +302,69 @@ Utility functions added:
 
 ## Conclusion
 The VLM implementation successfully addresses all critical issues preventing PDF parsing from working correctly. The system now reliably processes PDFs using Vision Language Models, providing enhanced document processing capabilities with improved accuracy for documents containing images, charts, and complex layouts.
+## Hybrid VLM Table Parsing Feature
+- **Date**: 2025-11-11
+
+### Overview
+A hybrid table parsing approach was implemented that combines DeepDoc's high-accuracy table location detection with VLM-based semantic table parsing. DeepDoc identifies table regions quickly and reliably; VLMs parse cell contents, handle merged cells and nested headers, and produce structured HTML or Markdown. On failure, the pipeline automatically falls back to the existing TableStructureRecognizer for robustness.
+
+### Key Features
+- Deepdoc detects table locations (fast and accurate).
+- VLM parses table content (handles complex structures, merged cells, nested headers).
+- Automatic fallback to TableStructureRecognizer on VLM failure.
+- Configurable via environment variables (opt-in by default).
+- Smart resize integration for Qwen3-VL and similar models (dimensions as multiples of 32).
+
+### Files Modified
+1. [`rag/prompts/table_vlm_prompt.md`](rag/prompts/table_vlm_prompt.md:1) - Created table-specific VLM prompt
+2. [`deepdoc/parser/pdf_parser.py`](deepdoc/parser/pdf_parser.py:1) - Added VLM table parser methods and validation helpers
+3. [`rag/flow/parser/parser.py`](rag/flow/parser/parser.py:1) - Pass vision_model to parser and opt-in enablement
+4. [`docker/docker-compose.yml`](docker/docker-compose.yml:51) - Added environment variables for hybrid table parsing
+5. [`test_vlm_table_parsing.py`](test_vlm_table_parsing.py:1) - Created unit tests validating hybrid behavior and fallbacks
+
+### Environment Variables
+- `USE_VLM_TABLE_PARSING` (default: false) — Enable hybrid VLM table parsing (opt-in).
+- `VLM_TABLE_MODEL` (default: empty) — Optional specific VLM model to use for table parsing.
+- `VLM_TABLE_TIMEOUT_SEC` (default: 30) — Timeout per table parsing attempt (seconds).
+- `VLM_TABLE_FALLBACK_ENABLED` (default: true) — If true, fallback to TableStructureRecognizer on VLM parse failure.
+- `VLM_TABLE_OUTPUT_FORMAT` (default: html) — Output format expected from VLM: "html" or "markdown".
+- `VLM_TABLE_PROMPT_PATH` (default: repo prompt) — Optional path to custom table prompt file.
+- `VLM_RESIZE_FACTOR` (default: 32) — Ensures VLM images are resized to dimensions that are multiples of this value.
+
+### Benefits
+- Better accuracy on complex tables (merged cells, nested headers).
+- Maintains speed (only processes table regions with VLM).
+- Non-breaking: opt-in and disabled by default for backwards compatibility.
+- Robust fallback mechanisms ensure no loss of table extraction capability.
+
+### Usage
+Enable the feature via environment variable or docker-compose override.
+
+```bash
+# Enable in shell
+export USE_VLM_TABLE_PARSING=true
+export VLM_TABLE_MODEL=Qwen3-VL
+```
+
+Or in `docker/docker-compose.yml` (already added under service environment):
+
+```bash
+# Example snippet already present:
+- USE_VLM_TABLE_PARSING=false
+- VLM_TABLE_MODEL=${VLM_TABLE_MODEL:-}
+- VLM_TABLE_TIMEOUT_SEC=30
+- VLM_TABLE_FALLBACK_ENABLED=true
+- VLM_TABLE_OUTPUT_FORMAT=html
+- VLM_TABLE_PROMPT_PATH=${VLM_TABLE_PROMPT_PATH:-}
+```
+
+Quick runtime enable via docker-compose env file (.env):
+
+```bash
+# .env
+USE_VLM_TABLE_PARSING=true
+VLM_TABLE_MODEL=Qwen3-VL
+VLM_TABLE_OUTPUT_FORMAT=html
+```
+
+This hybrid implementation keeps default behavior unchanged unless explicitly enabled, and provides a path to leverage VLMs for improved table content fidelity while preserving the proven TableStructureRecognizer as a safe fallback.

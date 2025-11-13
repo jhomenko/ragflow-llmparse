@@ -216,8 +216,39 @@ class Parser(ProcessBase):
         conf = self._param.setups["pdf"]
         self.set_output("output_format", conf["output_format"])
 
-        if conf.get("parse_method").lower() == "deepdoc":
-            bboxes = RAGFlowPdfParser().parse_into_bboxes(blob, callback=self.callback)
+        if str(conf.get("parse_method", "")).lower() == "deepdoc":
+            # Use RAGFlowPdfParser and optionally attach a vision model for VLM table parsing
+            parser = RAGFlowPdfParser()
+            try:
+                use_vlm = os.environ.get("USE_VLM_TABLE_PARSING", "0")
+                if str(use_vlm).lower() in ("1", "true", "yes", "on"):
+                    # Determine table model name: prefer env VLM_TABLE_MODEL, fallback to parse_method
+                    table_model = os.environ.get("VLM_TABLE_MODEL") or conf.get("parse_method")
+                    tenant_id = getattr(self._canvas, "get_tenant_id", lambda: getattr(self._canvas, '_tenant_id', None))()
+                    if not tenant_id:
+                        logging.warning("Parser._pdf: Missing tenant_id, cannot create LLMBundle for VLM table parsing; proceeding without VLM tables")
+                    else:
+                        try:
+                            vision_model = LLMBundle(
+                                tenant_id,
+                                LLMType.IMAGE2TEXT,
+                                llm_name=table_model,
+                                lang=conf.get("lang", "Chinese"),
+                            )
+                            if vision_model:
+                                # attach vision model to the parser for table-aware parsing
+                                parser.vision_model = vision_model
+                                logging.info(f"Parser._pdf: Attached vision model '{table_model}' to RAGFlowPdfParser for VLM table parsing")
+                            else:
+                                logging.warning("Parser._pdf: LLMBundle creation returned None for VLM table model; proceeding without VLM tables")
+                        except Exception as e:
+                            logging.warning(f"Parser._pdf: Failed to create LLMBundle for VLM table parsing ({table_model}): {e}; proceeding without VLM tables")
+            except Exception as e:
+                logging.warning(f"Parser._pdf: Error while configuring VLM table parsing: {e}; proceeding without VLM tables")
+            
+            # Ensure the vision model is properly attached before starting the parsing process
+            logging.info(f"VLM table parsing: vision_model present={hasattr(parser, 'vision_model') and parser.vision_model is not None}")
+            bboxes = parser.parse_into_bboxes(blob, callback=self.callback)
         elif conf.get("parse_method").lower() == "plain_text":
             lines, _ = PlainParser()(blob)
             bboxes = [{"text": t} for t, _ in lines]

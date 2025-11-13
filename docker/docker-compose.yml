@@ -48,6 +48,19 @@ services:
       - TZ=${TIMEZONE}
       - HF_ENDPOINT=${HF_ENDPOINT-}
       - MACOS=${MACOS-}
+      # Hybrid VLM Table Parsing Configuration
+      # Enable VLM table parsing (default: false for backward compatibility)
+      - USE_VLM_TABLE_PARSING=false
+      # Optional: specific VLM model for table parsing; allow runtime override at container start
+      - VLM_TABLE_MODEL=${VLM_TABLE_MODEL:-}
+      # Timeout (seconds) per individual table parsing attempt
+      - VLM_TABLE_TIMEOUT_SEC=30
+      # Fallback to existing TableStructureRecognizer on VLM failure (default: true)
+      - VLM_TABLE_FALLBACK_ENABLED=true
+      # Output format for VLM table parsing: "html" or "markdown"
+      - VLM_TABLE_OUTPUT_FORMAT=html
+      # Optional: path to custom table prompt file (allow runtime override)
+      - VLM_TABLE_PROMPT_PATH=${VLM_TABLE_PROMPT_PATH:-}
     networks:
       - ragflow
     restart: on-failure

@@ -26,6 +26,7 @@ from copy import deepcopy
 from io import BytesIO
 import io
 from timeit import default_timer as timer
+from pathlib import Path
 
 import numpy as np
 import pdfplumber
@@ -48,7 +49,7 @@ except Exception:
         # Fallback noop if the helper is not available in this codebase.
         return None
 from deepdoc.vision import OCR, AscendLayoutRecognizer, LayoutRecognizer, Recognizer, TableStructureRecognizer
-from rag.app.picture import vision_llm_chunk as picture_vision_llm_chunk
+from rag.app.picture import vision_llm_chunk, vision_llm_chunk as picture_vision_llm_chunk
 from rag.nlp import rag_tokenizer
 from rag.prompts.generator import vision_llm_describe_prompt
 from rag.settings import PARALLEL_DEVICES
@@ -109,7 +110,7 @@ def smart_resize(height: int, width: int, factor: int = 32, target_max_dimension
 
 
 class RAGFlowPdfParser:
-    def __init__(self, **kwargs):
+    def __init__(self, vision_model=None, **kwargs):
         """
         If you have trouble downloading HuggingFace models, -_^ this might help!!
 
@@ -120,7 +121,14 @@ class RAGFlowPdfParser:
         Good luck
         ^_-
 
+        Accepts optional vision_model so callers can attach a VLM bundle (LLMBundle or compatible)
+        for hybrid table parsing. This guarantees the parser has a consistent attribute whether
+        called via different code paths.
         """
+
+        # Attach provided vision model (may be None)
+        self.vision_model = vision_model
+        logging.debug(f"RAGFlowPdfParser.__init__: vision_model provided: {bool(self.vision_model)}")
 
         self.ocr = OCR()
         self.parallel_limiter = None
@@ -253,17 +261,22 @@ class RAGFlowPdfParser:
         return True
 
     def _table_transformer_job(self, ZM):
+        # Add validation to confirm self.vision_model exists before attempting VLM parsing
+        vision_present = hasattr(self, "vision_model") and getattr(self, "vision_model", None) is not None
+        logging.info(f"VLM table parsing: vision_model present={vision_present}")
         logging.debug("Table processing...")
         imgs, pos = [], []
         tbcnt = [0]
         MARGIN = 10
         self.tb_cpns = []
         assert len(self.page_layout) == len(self.page_images)
+        logging.info(f"_table_transformer_job: Extracting table regions from {len(self.page_layout)} pages")
         for p, tbls in enumerate(self.page_layout):  # for page
             tbls = [f for f in tbls if f["type"] == "table"]
             tbcnt.append(len(tbls))
             if not tbls:
                 continue
+            logging.info(f"_table_transformer_job: Page {p+1} has {len(tbls)} table regions")
             for tb in tbls:  # for table
                 left, top, right, bott = tb["x0"] - MARGIN, tb["top"] - MARGIN, tb["x1"] + MARGIN, tb["bottom"] + MARGIN
                 left *= ZM
@@ -272,16 +285,109 @@ class RAGFlowPdfParser:
                 bott *= ZM
                 pos.append((left, top))
                 imgs.append(self.page_images[p].crop((left, top, right, bott)))
+                logging.debug(f"_table_transformer_job: Extracted table region - page={p+1}, bbox=({tb['x0']:.1f},{tb['top']:.1f},{tb['x1']:.1f},{tb['bottom']:.1f}), crop_coords=({left:.1f},{top:.1f},{right:.1f},{bott:.1f})")
 
         assert len(self.page_images) == len(tbcnt) - 1
         if not imgs:
+            logging.info("_table_transformer_job: No table images to process")
             return
-        recos = self.tbl_det(imgs)
+        
+        # Step 2: Optional VLM routing for tables (hybrid VLM/TableStructureRecognizer)
+        env_flag = os.getenv("USE_VLM_TABLE_PARSING", "false")
+        vlm_enabled = str(env_flag).lower() == "true" and vision_present
+        
+        # Add explicit logging of environment variable values
+        logging.info(f"USE_VLM_TABLE_PARSING={env_flag}, vision_model_present={vision_present}, vlm_enabled={vlm_enabled}")
+        
+        logging.info(f"Table parsing path: VLM={vlm_enabled}, table_count={len(imgs)}")
+        
+        # Add validation that required environment variables are set before attempting VLM parsing
+        if vlm_enabled and not vision_present:
+            logging.warning("_table_transformer_job: VLM parsing requested but no vision_model available; falling back to TableStructureRecognizer")
+            vlm_enabled = False
+        
+        # Verify that VLM_TABLE_MODEL environment variable is properly used when creating the vision model
+        if vlm_enabled:
+            # Check if VLM_TABLE_MODEL is set and log it
+            table_model_env = os.getenv("VLM_TABLE_MODEL", None)
+            if table_model_env:
+                logging.info(f"VLM_TABLE_MODEL environment variable is set to: {table_model_env}")
+            else:
+                logging.info("VLM_TABLE_MODEL environment variable is not set, using default vision_model")
+        
+        recos = None
+        if vlm_enabled:
+            # Allow a separate model for table parsing if provided (env override preferred)
+            table_model_env = os.getenv("VLM_TABLE_MODEL", None)
+            table_model = table_model_env if table_model_env is not None else self.vision_model
+            logging.debug(f"_table_transformer_job: selected table_model from env='{table_model_env}' type={type(table_model)}")
+            try:
+                vlm_results = self._vlm_table_parser(imgs, pos, vision_model=table_model)
+                logging.debug(f"_table_transformer_job: vlm_results received: {len(vlm_results)} items")
+            except Exception:
+                logging.exception("VLM table parser failed; falling back to TableStructureRecognizer for all tables")
+                vlm_results = [None] * len(imgs)
+        
+            # vlm_results: list of strings (validated html/md) or None (signal fallback)
+            # Prepare combined recos: for vlm-success -> [{'html': <str>}] ; for None -> use table structure recognizer
+            indices_need_fallback = [i for i, r in enumerate(vlm_results) if r is None]
+            logging.info(f"_table_transformer_job: VLM results - successful={len(vlm_results) - len(indices_need_fallback)}, need_fallback={len(indices_need_fallback)}")
+            logging.debug(f"_table_transformer_job: indices_need_fallback={indices_need_fallback}")
+            fallback_recos = []
+            if indices_need_fallback:
+                try:
+                    # Run TableStructureRecognizer only on tables that need fallback
+                    fallback_imgs = [imgs[i] for i in indices_need_fallback]
+                    fallback_recos = self.tbl_det(fallback_imgs)
+                    logging.debug(f"_table_transformer_job: fallback_recos obtained for {len(fallback_recos)} tables")
+                except Exception:
+                    logging.exception("TableStructureRecognizer fallback failed for some tables")
+                    # ensure we have placeholders so lengths align
+                    fallback_recos = [[] for _ in indices_need_fallback]
+        
+            # Build recos as a list aligned with imgs
+            recos = []
+            fallback_iter = iter(fallback_recos)
+            for i, r in enumerate(vlm_results):
+                if r is None:
+                    # Insert the next result from the fallback recos (which is a list of component dicts)
+                    recos.append(next(fallback_iter, []))
+                    logging.debug(f"_table_transformer_job: table {i} using fallback recognition")
+                else:
+                    # VLM produced an HTML/markdown result string -> wrap as a single dict entry
+                    recos.append([{"html": r}])
+                    logging.debug(f"_table_transformer_job: table {i} processed with VLM")
+        else:
+            logging.info("_table_transformer_job: Using TableStructureRecognizer for all tables")
+            recos = self.tbl_det(imgs)
+
+        # Step 3: Process recos (can contain VLM-wrapped results or standard TableStructureRecognizer output)
         tbcnt = np.cumsum(tbcnt)
         for i in range(len(tbcnt) - 1):  # for page
             pg = []
             for j, tb_items in enumerate(recos[tbcnt[i] : tbcnt[i + 1]]):  # for table
                 poss = pos[tbcnt[i] : tbcnt[i + 1]]
+                # If VLM returned table HTML/markdown, tb_items will be a list whose first item is a dict with 'html'
+                if tb_items and isinstance(tb_items[0], dict) and "html" in tb_items[0]:
+                    # mark VLM result and attach minimal metadata
+                    it = tb_items[0]
+                    it["source"] = "vlm"
+                    it["pn"] = i
+                    it["layoutno"] = j
+                    # Try to attach approximate bounding box from cropping info if available
+                    try:
+                        left, top = poss[j]
+                        it.setdefault("x0", left / ZM)
+                        it.setdefault("x1", (left + imgs[tbcnt[i] + j].size[0]) / ZM)
+                        it.setdefault("top", top / ZM + self.page_cum_height[i])
+                        it.setdefault("bottom", (top + imgs[tbcnt[i] + j].size[1]) / ZM + self.page_cum_height[i])
+                    except Exception:
+                        # If pos not available or malformed, leave geometry absent — gather logic will skip VLM items
+                        logging.debug("VLM table item missing position metadata")
+                    pg.append(it)
+                    continue
+
+                # Standard TableStructureRecognizer output: adjust coordinates back to document scale
                 for it in tb_items:  # for table components
                     it["x0"] = it["x0"] + poss[j][0]
                     it["x1"] = it["x1"] + poss[j][0]
@@ -297,7 +403,7 @@ class RAGFlowPdfParser:
             self.tb_cpns.extend(pg)
 
         def gather(kwd, fzy=10, ption=0.6):
-            eles = Recognizer.sort_Y_firstly([r for r in self.tb_cpns if re.match(kwd, r["label"])], fzy)
+            eles = Recognizer.sort_Y_firstly([r for r in self.tb_cpns if "label" in r and re.match(kwd, r["label"]) and all(key in r for key in ["top", "x0"])], fzy)
             eles = Recognizer.layouts_cleanup(self.boxes, eles, 5, ption)
             return Recognizer.sort_Y_firstly(eles, 0)
 
@@ -305,19 +411,19 @@ class RAGFlowPdfParser:
         headers = gather(r".*header$")
         rows = gather(r".* (row|header)")
         spans = gather(r".*spanning")
-        clmns = sorted([r for r in self.tb_cpns if re.match(r"table column$", r["label"])], key=lambda x: (x["pn"], x["layoutno"], x["x0"]))
+        clmns = sorted([r for r in self.tb_cpns if "label" in r and re.match(r"table column$", r["label"]) and all(key in r for key in ["pn", "layoutno", "x0"])], key=lambda x: (x["pn"], x["layoutno"], x["x0"]))
         clmns = Recognizer.layouts_cleanup(self.boxes, clmns, 5, 0.5)
         for b in self.boxes:
             if b.get("layout_type", "") != "table":
                 continue
             ii = Recognizer.find_overlapped_with_threshold(b, rows, thr=0.3)
-            if ii is not None:
+            if ii is not None and "top" in rows[ii] and "bottom" in rows[ii]:
                 b["R"] = ii
                 b["R_top"] = rows[ii]["top"]
                 b["R_bott"] = rows[ii]["bottom"]
 
             ii = Recognizer.find_overlapped_with_threshold(b, headers, thr=0.3)
-            if ii is not None:
+            if ii is not None and all(key in headers[ii] for key in ["top", "bottom", "x0", "x1"]):
                 b["H_top"] = headers[ii]["top"]
                 b["H_bott"] = headers[ii]["bottom"]
                 b["H_left"] = headers[ii]["x0"]
@@ -325,13 +431,13 @@ class RAGFlowPdfParser:
                 b["H"] = ii
 
             ii = Recognizer.find_horizontally_tightest_fit(b, clmns)
-            if ii is not None:
+            if ii is not None and "x0" in clmns[ii] and "x1" in clmns[ii]:
                 b["C"] = ii
                 b["C_left"] = clmns[ii]["x0"]
                 b["C_right"] = clmns[ii]["x1"]
 
             ii = Recognizer.find_overlapped_with_threshold(b, spans, thr=0.3)
-            if ii is not None:
+            if ii is not None and all(key in spans[ii] for key in ["top", "bottom", "x0", "x1"]):
                 b["H_top"] = spans[ii]["top"]
                 b["H_bott"] = spans[ii]["bottom"]
                 b["H_left"] = spans[ii]["x0"]
@@ -954,6 +1060,55 @@ class RAGFlowPdfParser:
 
             poss = []
 
+            # Detect VLM-sourced table items (hybrid path)
+            is_vlm_table = any([isinstance(b, dict) and b.get("source") == "vlm" for b in bxs])
+            if is_vlm_table:
+                # Extract HTML directly from VLM output dicts (prefer first non-empty)
+                html = None
+                for b in bxs:
+                    if isinstance(b, dict) and b.get("html"):
+                        html = b.get("html")
+                        break
+
+                # If no html was found, fall back to standard path
+                if not html:
+                    res.append((cropout(bxs, "table", poss), self.tbl_det.construct_table(bxs, html=return_html, is_english=self.is_english)))
+                    positions.append(poss)
+                    continue
+
+                # Validate / clean HTML table if helper is available
+                try:
+                    html = self._validate_html_table(html)
+                except Exception:
+                    pass
+
+                # Try to extract caption text from boxes that are marked as captions
+                caption_text = None
+                for b in bxs:
+                    try:
+                        if TableStructureRecognizer.is_caption(b):
+                            caption_text = b.get("text", "").strip()
+                            if caption_text:
+                                break
+                    except Exception:
+                        continue
+
+                # Insert caption into HTML if not already present and if we found caption text
+                try:
+                    if caption_text and "<caption" not in html.lower():
+                        m = re.search(r"<table[^>]*>", html, flags=re.IGNORECASE)
+                        if m:
+                            insert_at = m.end()
+                            html = html[:insert_at] + f"<caption>{caption_text}</caption>" + html[insert_at:]
+                except Exception:
+                    logging.exception("Failed to insert caption into VLM HTML")
+
+                # Use cropout for image and attach validated HTML content (VLM path)
+                res.append((cropout(bxs, "table", poss), html))
+                positions.append(poss)
+                continue
+
+            # Standard (deepdoc) table processing path remains unchanged
             res.append((cropout(bxs, "table", poss), self.tbl_det.construct_table(bxs, html=return_html, is_english=self.is_english)))
             positions.append(poss)
 
@@ -1372,8 +1527,225 @@ class RAGFlowPdfParser:
             pn += 1
             poss.append((pn, bx["x0"], bx["x1"], top, min(bott, self.page_images[pn - 1].size[1] / ZM)))
         return poss
+ 
+ 
+    def _validate_html_table(self, html_output):
+        """
+        Validate and clean HTML table output from VLM.
+        - Remove markdown code fences (```html ... ```)
+        - Ensure a <table> wrapper exists (wrap if missing)
+        - Log a warning if no <tr> tags are present (likely malformed)
+        - Return cleaned HTML string
+        """
+        try:
+            if not isinstance(html_output, str):
+                return html_output
+            s = html_output.strip()
+            # Remove markdown code fences like ```html ... ``` or ``` ... ```
+            s = re.sub(r"```(?:\s*html)?\s*\n?", "", s, flags=re.IGNORECASE)
+            s = re.sub(r"\n?```", "", s)
+            s = s.strip()
+            lower = s.lower()
+            # If there's no table tag at all, wrap the content in <table>...</table>
+            if "<table" not in lower:
+                logging.warning("VLM returned table-like content without <table> tag; wrapping in <table>...</table>")
+                s = "<table>\n" + s + "\n</table>"
+                lower = s.lower()
+            # If there are no <tr> tags, log a warning (rows missing)
+            if "<tr" not in lower:
+                logging.warning("Validated HTML table appears to have no <tr> entries; output may be malformed.")
+            return s
+        except Exception:
+            logging.exception("_validate_html_table")
+            return html_output
+ 
+    def _validate_markdown_table(self, md_output):
+        """
+        Validate markdown table output.
+        - Ensure pipe '|' separators are present
+        - Log a warning if format looks invalid
+        - Return cleaned markdown string
+        """
+        try:
+            if not isinstance(md_output, str):
+                return md_output
+            s = md_output.strip()
+            # Remove surrounding markdown fences if present
+            s = re.sub(r"```(?:\s*markdown)?\s*\n?", "", s, flags=re.IGNORECASE)
+            s = re.sub(r"\n?```", "", s)
+            s = s.strip()
+            # Basic validation: presence of pipe separators and at least one header separator line (---)
+            if "|" not in s:
+                logging.warning("Validated markdown table does not contain '|' separators; format may be invalid for a table.")
+            else:
+                # Check for a header separator like | --- | --- |
+                if not re.search(r"\|\s*-{3,}\s*\|", s):
+                    # Not mandatory to have header separator in all markdown styles, but warn if missing
+                    logging.warning("Markdown table missing a header separator row (e.g. | --- | --- |); ensure proper markdown table formatting.")
+            return s
+        except Exception:
+            logging.exception("_validate_markdown_table")
+            return md_output
 
+    def _get_table_prompt(self, output_format="html"):
+        """
+        Load table-specific VLM prompt.
 
+        Behavior:
+        - If VLM_TABLE_PROMPT_PATH env var is set, attempt to load that file.
+        - Otherwise default to rag/prompts/table_vlm_prompt.md relative to repo root.
+        - If file missing or unreadable, return an inline fallback prompt.
+        - Supports output_format "html" or "markdown".
+        """
+        try:
+            prompt_file = os.getenv("VLM_TABLE_PROMPT_PATH")
+            if not prompt_file:
+                base = Path(__file__).resolve().parent.parent.parent
+                prompt_file = base / "rag" / "prompts" / "table_vlm_prompt.md"
+            else:
+                prompt_file = Path(prompt_file)
+
+            if prompt_file.exists():
+                try:
+                    return prompt_file.read_text(encoding="utf-8")
+                except Exception:
+                    logging.exception("Failed to read table prompt file; falling back to inline prompt")
+        except Exception:
+            logging.exception("_get_table_prompt")
+
+        # Inline fallback prompts
+        fmt = str(output_format).lower()
+        if fmt == "markdown" or fmt == "md":
+            return (
+                "Extract this table as markdown. Use '|' for columns and a header separator row (e.g. | --- | --- |). "
+                "Preserve headers and data exactly. Output only the markdown table, without fences or any additional text."
+            )
+        else:
+            return (
+                "Extract this table as HTML. Use <table>, <tr>, <th>, <td> tags. "
+                "Use integer colspan and rowspan attributes for merged cells. "
+                "Include a <caption> if visible. Output ONLY the single <table>...</table> element, "
+                "no surrounding HTML, markdown fences, or explanatory text."
+            )
+    
+    def _vlm_table_parser(self, table_images, table_positions, vision_model=None):
+        """
+        Parse table images using a Vision-Language Model (VLM).
+        
+        Args:
+            table_images: List of PIL images representing tables
+            table_positions: List of positions for the tables
+            vision_model: Vision model to use for parsing (LLMBundle or compatible)
+            
+        Returns:
+            List of parsed table outputs (HTML/Markdown strings or None for fallback)
+        """
+        start_time = timer()
+        logging.info(f"_vlm_table_parser: Starting to process {len(table_images)} table images")
+        logging.debug(f"_vlm_table_parser: vision_model type={type(vision_model)}, available={vision_model is not None}")
+        
+        # Log environment settings that affect VLM behavior
+        resize_factor = int(os.getenv("VLM_RESIZE_FACTOR", "32"))
+        timeout_env = os.getenv("VLM_TABLE_TIMEOUT_SEC")
+        output_format = os.getenv("VLM_TABLE_OUTPUT_FORMAT", "html").lower()
+        fallback_enabled = os.getenv("VLM_TABLE_FALLBACK_ENABLED", "true").lower() == "true"
+        
+        logging.info(f"_vlm_table_parser: Configuration - resize_factor={resize_factor}, timeout={timeout_env}, output_format={output_format}, fallback_enabled={fallback_enabled}")
+        
+        results = []
+        MAX_JPG_BYTES = 5 * 1024 * 1024  # 5 MB safety threshold
+    
+        for idx, img in enumerate(table_images):
+            table_start_time = timer()
+            try:
+                if img is None:
+                    raise ValueError("Received None image for table index {}".format(idx))
+    
+                # Ensure RGB
+                pil = img.convert("RGB")
+    
+                # Compute resized dims (smart_resize expects height, width)
+                width, height = pil.size
+                target_h, target_w = smart_resize(height, width, factor=resize_factor, target_max_dimension=1024)
+    
+                # Resize with LANCZOS
+                pil = pil.resize((target_w, target_h), resample=Image.Resampling.LANCZOS)
+    
+                # Convert to JPEG bytes
+                buf = BytesIO()
+                pil.save(buf, format="JPEG", quality=90, optimize=True)
+                jpg_bytes = buf.getvalue()
+    
+                # If too large, attempt progressive reductions (quality -> shrink)
+                if len(jpg_bytes) > MAX_JPG_BYTES:
+                    logging.warning(f"_vlm_table_parser: table {idx} jpeg {len(jpg_bytes)} bytes > {MAX_JPG_BYTES}, trying quality=60")
+                    buf = BytesIO()
+                    pil.save(buf, format="JPEG", quality=60, optimize=True)
+                    jpg_bytes = buf.getvalue()
+    
+                if len(jpg_bytes) > MAX_JPG_BYTES:
+                    logging.warning(f"_vlm_table_parser: table {idx} still > {MAX_JPG_BYTES}, resizing down by 0.5")
+                    new_size = (max(100, int(pil.size[0] * 0.5)), max(10, int(pil.size[1] * 0.5)))
+                    pil_small = pil.resize(new_size, resample=Image.Resampling.LANCZOS)
+                    buf = BytesIO()
+                    pil_small.save(buf, format="JPEG", quality=60, optimize=True)
+                    jpg_bytes = buf.getvalue()
+    
+                # Build prompt
+                prompt = self._get_table_prompt(output_format)
+                logging.debug(f"_vlm_table_parser: table {idx} prompt length: {len(prompt)} chars")
+    
+                # Call the vision LLM
+                try:
+                    if timeout is not None:
+                        out = vision_llm_chunk(binary=jpg_bytes, vision_model=vision_model, prompt=prompt, timeout=timeout)
+                    else:
+                        out = vision_llm_chunk(binary=jpg_bytes, vision_model=vision_model, prompt=prompt)
+                except TypeError:
+                    # If the function does not accept timeout kwarg, retry without it
+                    out = vision_llm_chunk(binary=jpg_bytes, vision_model=vision_model, prompt=prompt)
+    
+                # Unwrap tuple responses (some wrappers return (text, meta))
+                if isinstance(out, tuple) and len(out) > 0:
+                    out = out[0]
+    
+                # Normalize type
+                if out is None:
+                    raise RuntimeError("VLM returned None")
+                if not isinstance(out, str):
+                    try:
+                        out = str(out)
+                    except Exception:
+                        raise RuntimeError("VLM returned non-string output")
+    
+                # Validate according to chosen format
+                if output_format in ("html", "htm"):
+                    validated = self._validate_html_table(out)
+                else:
+                    validated = self._validate_markdown_table(out)
+                    
+                # Calculate duration for this table
+                table_duration = timer() - table_start_time
+                logging.info(f"_vlm_table_parser: table {idx} processed in {table_duration:.2f}s")
+    
+                results.append(validated)
+            except Exception as e:
+                table_duration = timer() - table_start_time
+                logging.exception(f"_vlm_table_parser: failed parsing table {idx} after {table_duration:.2f}s - Error: {str(e)}")
+                if fallback_enabled:
+                    # Signal caller to fallback by returning None for this index
+                    results.append(None)
+                else:
+                    # Provide a minimal error table matching requested format
+                    if output_format in ("html", "htm"):
+                        results.append("<table><tr><td>Table parsing failed</td></tr></table>")
+                    else:
+                        results.append("| Table parsing failed |")
+    
+        total_duration = timer() - start_time
+        logging.info(f"_vlm_table_parser: completed processing {len(table_images)} tables in {total_duration:.2f}s")
+        return results
+ 
 class PlainParser:
     def __call__(self, filename, from_page=0, to_page=100000, **kwargs):
         self.outlines = []

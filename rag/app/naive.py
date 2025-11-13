@@ -502,7 +502,13 @@ def chunk(filename, binary=None, from_page=0, to_page=100000,
             except Exception:
                 vision_model = None
 
+            # Attach vision model to the Pdf parser instance so hybrid table parsing can use it
             if vision_model:
+                try:
+                    pdf_parser.vision_model = vision_model
+                    logging.info("naive.chunk: attached vision_model to Pdf() for DeepDOC parsing")
+                except Exception:
+                    logging.debug("naive.chunk: failed to attach vision_model attribute to Pdf() instance")
                 sections, tables, figures = pdf_parser(filename if not binary else binary, from_page=from_page, to_page=to_page, callback=callback, separate_tables_figures=True)
                 callback(0.5, "Basic parsing complete. Proceeding with figure enhancement...")
                 try:
