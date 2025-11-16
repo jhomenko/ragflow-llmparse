@@ -18,6 +18,7 @@ import io
 import re
 import logging
 import os
+from typing import Optional
 
 import numpy as np
 from PIL import Image
@@ -29,6 +30,14 @@ from rag.nlp import tokenize
 from rag.utils import clean_markdown_block
 from rag.nlp import rag_tokenizer
 from rag.llm.working_vlm_module import describe_image_working
+
+
+class VisionLLMCallError(Exception):
+    """Raised when the working VLM cannot be reached or returns transport errors."""
+
+
+class VisionLLMResponseError(Exception):
+    """Raised when the working VLM returns unusable text (e.g., repetition loops)."""
 
 
 def extract_base_model_name(full_model_name):
@@ -60,6 +69,118 @@ def extract_base_model_name(full_model_name):
     return full_model_name
 
 ocr = OCR()
+
+_REPEAT_HINT = (
+    "Please avoid repeating the same sentence or table multiple times. "
+    "If content is duplicated in the source, summarize it once and continue."
+)
+
+
+def _normalize_working_result(result):
+    text = None
+    token_count = None
+    if isinstance(result, tuple):
+        if len(result) >= 1:
+            text = result[0]
+        if len(result) >= 2:
+            token_count = result[1]
+    else:
+        text = result
+
+    if text is None:
+        text = ""
+    if not isinstance(text, str):
+        try:
+            text = str(text)
+        except Exception:
+            text = ""
+
+    text = clean_markdown_block(text).strip()
+
+    if token_count is None or not isinstance(token_count, (int, float)):
+        token_count = 0
+    return text, int(token_count)
+
+
+def _has_repetitive_pattern(text: str) -> bool:
+    normalized = (text or "").strip()
+    if len(normalized) < 300:
+        return False
+
+    for pattern_len in (50, 100, 200):
+        if len(normalized) < pattern_len * 3:
+            continue
+        pattern = normalized[:pattern_len]
+        # str.count works well enough for obvious loops (copy/paste)
+        repeats = normalized.count(pattern)
+        if repeats >= 3:
+            return True
+
+    # Fallback: check first few non-empty lines; if mostly identical and there are many lines, treat as repetition
+    lines = [ln.strip() for ln in normalized.splitlines() if ln.strip()]
+    if len(lines) >= 15:
+        sample = lines[:5]
+        if len(set(sample)) <= 1:
+            return True
+    return False
+
+
+def _validate_vlm_text(text: str) -> None:
+    if not text or not text.strip():
+        logging.warning("vision_llm_chunk: VLM returned empty text")
+        return
+
+    if _has_repetitive_pattern(text):
+        raise VisionLLMResponseError("Detected repeated pattern suggesting the model looped")
+
+
+def _call_working_vlm_with_retry(image_bytes: bytes, prompt: str, model_name: str, callback):
+    max_attempts = max(1, int(os.getenv("VLM_PAGE_MAX_ATTEMPTS", "2")))
+    prompt = prompt or ""
+    last_error: Optional[Exception] = None
+
+    for attempt in range(max_attempts):
+        temperature = min(0.1 + attempt * 0.1, 0.4)
+        attempt_prompt = prompt
+        if attempt > 0:
+            attempt_prompt = (prompt.rstrip() + "\n\n" + _REPEAT_HINT).strip()
+            logging.info(
+                "vision_llm_chunk: retrying with repetition hint, attempt %s/%s, temperature=%.2f",
+                attempt + 1,
+                max_attempts,
+                temperature,
+            )
+        else:
+            logging.info("vision_llm_chunk: attempt %s/%s at temperature %.2f", attempt + 1, max_attempts, temperature)
+
+        try:
+            result = describe_image_working(
+                image_bytes=image_bytes,
+                prompt=attempt_prompt,
+                model_name=model_name,
+                temperature=temperature,
+            )
+        except Exception as exc:
+            last_error = VisionLLMCallError(f"Working VLM call failed: {exc}")
+            logging.exception("vision_llm_chunk: working VLM module failed on attempt %s: %s", attempt + 1, exc)
+            continue
+
+        text, token_count = _normalize_working_result(result)
+        try:
+            _validate_vlm_text(text)
+            logging.info("Working VLM response: %s chars, %s tokens", len(text), token_count)
+            logging.debug("Working VLM preview: %s...", text[:200])
+            try:
+                callback(0.95, f"Working VLM tokens: {token_count}, preview: {text[:128]}")
+            except Exception:
+                pass
+            return text
+        except VisionLLMResponseError as resp_err:
+            last_error = resp_err
+            logging.warning("vision_llm_chunk: unusable response on attempt %s: %s", attempt + 1, resp_err)
+            continue
+
+    raise last_error or VisionLLMCallError("Working VLM exhausted all attempts without success")
 
 
 def chunk(filename, binary, tenant_id, lang, callback=None, **kwargs):
@@ -156,178 +277,27 @@ def vision_llm_chunk(binary, vision_model, prompt=None, callback=None):
     prompt = prompt or ""
     logging.debug(f"vision_llm_chunk: binary size={len(binary)} bytes, prompt length={len(prompt or '')}")
 
-    # Attempt to use the working VLM module first (controlled by env var)
     use_working_module = os.getenv("USE_WORKING_VLM", "true").lower() == "true"
+    if not use_working_module:
+        err = "vision_llm_chunk: working VLM module disabled via USE_WORKING_VLM"
+        logging.error(err)
+        try:
+            callback(-1, err)
+        except Exception:
+            pass
+        raise VisionLLMCallError(err)
+
     full_model_name = getattr(vision_model, "llm_name", None) or getattr(vision_model, "name", None) or "unknown"
     model_name = extract_base_model_name(full_model_name)
+    logging.info(f"vision_llm_chunk: Using working VLM module for model={model_name}")
 
-    if use_working_module:
-        logging.info(f"vision_llm_chunk: Using working VLM module: model={model_name}")
-        try:
-            prompt_for_working = prompt or ""
-            res = describe_image_working(image_bytes=binary, prompt=prompt_for_working, model_name=model_name)
-
-            text = None
-            token_count = None
-            if isinstance(res, tuple):
-                if len(res) >= 1:
-                    text = res[0]
-                if len(res) >= 2:
-                    token_count = res[1]
-            else:
-                text = res
-
-            # Normalize response
-            if text is None:
-                logging.warning("vision_llm_chunk: working_vlm returned None, treating as empty")
-                text = ""
-            if not isinstance(text, str):
-                try:
-                    text = str(text)
-                except Exception:
-                    text = ""
-
-            # Clean markdown fences and whitespace
-            text = clean_markdown_block(text).strip()
-    
-            # Validate markdown formatting
-            has_markdown = any([
-                '**' in text,                      # bold
-                ('*' in text and '**' not in text),# italic (not bold)
-                '`' in text,                       # code
-                text.strip().startswith('#'),      # headings
-                '|' in text,                       # tables
-            ])
-    
-            if not has_markdown and len(text) > 100:
-                logging.warning("⚠️ VLM response lacks markdown formatting - may need prompt adjustment")
-                logging.warning(f"Preview: {text[:200]}")
-    
-            if token_count is None:
-                token_count = 0
-            elif not isinstance(token_count, (int, float)):
-                logging.debug(f"vision_llm_chunk: Invalid token_count type from working_vlm: {type(token_count)}, setting to 0")
-                token_count = 0
-    
-            logging.info(f"Working VLM response: {len(text)} chars, {token_count} tokens")
-            logging.debug(f"Working VLM preview: {text[:200]}...")
-            try:
-                callback(0.95, f"Working VLM tokens: {token_count}, preview: {text[:128]}")
-            except Exception:
-                pass
-
-            if text:
-                return text
-            else:
-                logging.warning("vision_llm_chunk: Working VLM returned empty after cleanup, falling back to original path")
-
-        except Exception as e:
-            logging.exception("vision_llm_chunk: working VLM module failed, falling back to original VLM")
-            try:
-                callback(-1, f"working VLM module error: {e}")
-            except Exception:
-                pass
-
-    # Fallback: original vision_model code path
     try:
-        # Log model being used (best-effort)
-        model_name = getattr(vision_model, "llm_name", None) or getattr(vision_model, "name", None) or "unknown"
-        logging.debug(f"vision_llm_chunk: Calling VLM model: {model_name}")
-
-        # Call the vision model. Prefer describe_with_prompt if available.
-        if hasattr(vision_model, "describe_with_prompt"):
-            result = vision_model.describe_with_prompt(binary, prompt)
-        elif hasattr(vision_model, "describe"):
-            result = vision_model.describe(binary)
-        else:
-            err = "vision_llm_chunk: vision_model has no usable describe method"
-            logging.error(err)
-            try:
-                callback(-1, err)
-            except Exception:
-                pass
-            return ""
-
-        # Normalize result to text and optional token count
-        txt = None
-        token_count = None
-        if isinstance(result, tuple):
-            if len(result) >= 1:
-                txt = result[0]
-            if len(result) >= 2:
-                token_count = result[1]
-        else:
-            txt = result
-
-        # Handle None response
-        if txt is None:
-            logging.warning("vision_llm_chunk: VLM returned None, treating as empty")
-            try:
-                callback(0.5, "VLM returned no text")
-            except Exception:
-                pass
-            txt = ""
-
-        # Handle non-string response
-        if not isinstance(txt, str):
-            logging.warning(f"vision_llm_chunk: VLM returned non-string: {type(txt)}, converting to str")
-            try:
-                txt = str(txt)
-            except Exception:
-                txt = ""
-
-        # Clean up possible markdown fences
-        txt = clean_markdown_block(txt).strip()
-
-        # Check if response looks like an error message
-        error_patterns = ["error", "failed", "cannot", "unable", "invalid", "exception"]
-        if txt and any(pattern in txt.lower()[:200] for pattern in error_patterns):
-            logging.warning(f"vision_llm_chunk: VLM response may be an error message: {txt[:200]}")
-
-        # Warn on very long responses (might indicate model confusion)
-        if txt and len(txt) > 50000:  # ~50KB of text
-            logging.warning(f"vision_llm_chunk: Very long VLM response: {len(txt)} chars, may need truncation")
-            try:
-                callback(0.7, f"VLM very long response ({len(txt)} chars)")
-            except Exception:
-                pass
-
-        # Handle missing or invalid token count
-        if token_count is None:
-            token_count = 0
-        elif not isinstance(token_count, (int, float)):
-            logging.debug(f"vision_llm_chunk: Invalid token_count type: {type(token_count)}, setting to 0")
-            token_count = 0
-
-        # Final cleanup and validation
-        txt = txt.strip() if isinstance(txt, str) else ""
-        if not txt:
-            logging.warning("vision_llm_chunk: VLM returned empty string after cleanup")
-            try:
-                callback(0.9, "VLM returned empty text")
-            except Exception:
-                pass
-            return ""
-
-        # Log token usage and preview
-        logging.info(f"vision_llm_chunk: VLM response tokens={token_count}, chars={len(txt)}")
-        logging.debug(f"vision_llm_chunk: VLM preview: {txt[:200]}...")
+        text = _call_working_vlm_with_retry(binary, prompt or "", model_name, callback)
+        return text
+    except Exception as exc:
+        logging.exception("vision_llm_chunk failed after retries: %s", exc)
         try:
-            callback(0.95, f"VLM tokens: {token_count}, preview: {txt[:128]}")
+            callback(-1, f"vision_llm_chunk error: {exc}")
         except Exception:
             pass
-
-        # If extremely long, return as-is but warn again
-        if len(txt) > 200000:
-            logging.warning(f"vision_llm_chunk: Returning extremely long VLM output ({len(txt)} chars)")
-
-        return txt
-
-    except Exception as e:
-        # Log error and return empty string (do not crash)
-        logging.exception("vision_llm_chunk failed")
-        try:
-            callback(-1, f"vision_llm_chunk error: {e}")
-        except Exception:
-            pass
-        return ""
+        raise

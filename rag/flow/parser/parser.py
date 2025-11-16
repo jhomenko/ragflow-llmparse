@@ -31,7 +31,7 @@ from api.utils import get_uuid
 from api.utils.base64_image import image2id
 from deepdoc.parser import ExcelParser
 from deepdoc.parser.mineru_parser import MinerUParser
-from deepdoc.parser.pdf_parser import PlainParser, RAGFlowPdfParser, VisionParser
+from deepdoc.parser.pdf_parser import PlainParser, RAGFlowPdfParser, VisionParser, VisionParserPageError
 from deepdoc.parser.tcadp_parser import TCADPParser
 from rag.app.naive import Docx
 from rag.flow.base import ProcessBase, ProcessParamBase
@@ -403,6 +403,9 @@ class Parser(ProcessBase):
                                     logging.error("Parser._pdf: VisionParser returned unexpected type, treating as empty")
                                     lines = []
                                 logging.info(f"Parser._pdf: VisionParser returned {len(lines)} items")
+                            except VisionParserPageError as e:
+                                logging.exception(f"VisionParser unrecoverable error for model {parse_method}: {e}")
+                                raise
                             except Exception as e:
                                 logging.exception(f"VisionParser failed for model {parse_method}: {e}")
                                 lines = []

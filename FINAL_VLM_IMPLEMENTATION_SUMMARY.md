@@ -44,6 +44,16 @@ The implementation addresses four critical bugs that were preventing VLM from wo
 - **Fix**: Removed page divider instruction from template
 - **Impact**: VLM now transcribes actual content instead of just page markers
 
+### 4. Per-Page Retry & Fail-Fast Enforcement
+- **Files**: `rag/app/picture.py`, `rag/llm/working_vlm_module.py`, `deepdoc/parser/pdf_parser.py`, `rag/flow/parser/parser.py`
+- **Issue**: Working module ignored endpoint failures, retried blindly, and then fell back to the legacy path, producing partial/incorrect documents
+- **Fixes**:
+  - Introduced structured retries with prompt hints and temperature nudges (controlled by `VLM_PAGE_MAX_ATTEMPTS`)
+  - Removed legacy fallback path; working VLM responses are validated for repetition/emptiness
+  - Added `VisionParserPageError` so VisionParser aborts the entire document if any page fails after retries
+  - Parser layer now propagates these errors to the task executor to prevent indexing partial documents
+- **Impact**: Ensures documents are either fully parsed or fail loudly, giving operators actionable logs while still mitigating transient repetition loops.
+
 ## Architecture Changes
 
 ### Before Implementation
@@ -54,7 +64,7 @@ The implementation addresses four critical bugs that were preventing VLM from wo
 ### After Implementation
 - VLM module adds multimodal pre-processing stage
 - PDF/Image → direct_vision_parser → multimodal chunks
-- Enhanced error handling with per-page recovery
+- Deterministic per-page retries with fail-fast behavior to avoid partial outputs
 - Configurable chunking strategies (auto, page, heading, token-based)
 
 ## Files Modified
@@ -70,14 +80,16 @@ The implementation addresses four critical bugs that were preventing VLM from wo
 ### Test and Debug Files
 1. `test_vlm_fix.py` - Validation script
 2. `test_vlm_pdf_complete.py` - Complete test suite
-3. Various debug and analysis documents in changeDocs/
+3. `test/test_vlm_parallel.py` - Concurrency and failure-injection coverage
+4. `test/test_vision_llm_chunk_retry.py` - Validates retry/prompt mitigation logic
+5. Various debug and analysis documents in changeDocs/
 
 ## Key Improvements
 
 ### 1. Reliability
-- Per-page error recovery prevents entire document failures
-- Comprehensive input validation
-- Robust error handling with fallback content
+- Each page uses structured retries (prompt hint + temperature adjustments) before surfacing errors
+- VisionParser aborts the entire document when a page fails after retries to prevent partial ingestion
+- Comprehensive input validation plus explicit `VisionParserPageError`/callback updates provide actionable diagnostics
 
 ### 2. Performance
 - Optimized image compression for oversized images
@@ -103,7 +115,8 @@ The implementation addresses four critical bugs that were preventing VLM from wo
 | VLM_BASE_URL | http://192.168.68.186:8080/v1 | VLM server URL |
 | VLM_TIMEOUT_SEC | 60 | Request timeout in seconds |
 | VLM_MAX_PAGE_SIZE | 5MB | Maximum allowed size per page image |
-| VLM_RETRY_COUNT | 2 | Number of retries for transient errors |
+| VLM_PAGE_MAX_ATTEMPTS | 2 | Number of working-module attempts per page (adds prompt hint & higher temperature) |
+| PARALLEL_VLM_REQUESTS | 1 | Optional semaphore to enable concurrent page processing |
 
 ### Parser Configuration
 ```json
@@ -125,7 +138,7 @@ The implementation addresses four critical bugs that were preventing VLM from wo
 ### Unit Testing
 - Validate parsing logic and OCR fallback
 - Test chunk normalization
-- Verify error recovery mechanisms
+- Verify retry + fail-fast mechanisms (`test/test_vision_llm_chunk_retry.py`, `test/test_vlm_parallel.py`)
 
 ### Integration Testing
 - End-to-end ingestion → retrieval → LLM prompt flow
@@ -140,10 +153,11 @@ The implementation addresses four critical bugs that were preventing VLM from wo
 ## Troubleshooting Guide
 
 ### Common Issues
-1. **Empty VLM Responses**: Check model configuration and prompt files
-2. **Gibberish Output**: Increase image quality (higher zoomin)
-3. **Chunks Too Large/Small**: Adjust token limits and chunking strategy
-4. **Metadata Parsing Errors**: Verify VisionParser output format
+1. **Empty VLM Responses**: Check model configuration and prompt files; confirm retries are allowed via `VLM_PAGE_MAX_ATTEMPTS`
+2. **Gibberish or Repetition**: Increase image quality (higher zoomin) or fine-tune prompts; inspect retry logs for repetition hints
+3. **VisionParserPageError**: Indicates a page failed after all retries—review logs for the specific page and resolve upstream issues
+4. **Chunks Too Large/Small**: Adjust token limits and chunking strategy
+5. **Metadata Parsing Errors**: Verify VisionParser output format
 
 ### Debugging Tips
 - Enable DEBUG logging for detailed insights
@@ -206,7 +220,7 @@ If VLM integration causes issues:
 ```
 
 ## Future Enhancements
-- Parallel page processing for improved throughput
+- Smarter prompt templates per layout (tables, diagrams, dense text)
 - OCR fallback on VLM failure for higher reliability
 - Custom chunking rules per document type
 - Caching of VLM results to reduce API costs

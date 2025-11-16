@@ -40,6 +40,17 @@ if not hasattr(Image, "Resampling"):
         LANCZOS = Image.LANCZOS
     Image.Resampling = _Resampling
 from pypdf import PdfReader as pdf2_read
+from typing import Tuple, List, Optional
+import asyncio
+from asyncio import Semaphore
+# Optional: tenacity for retries (best-effort import; harmless fallback if missing)
+try:
+    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+except Exception:
+    def retry(*_args, **_kwargs):
+        def _decorator(func):
+            return func
+        return _decorator
 
 from api.utils.file_utils import get_project_base_directory
 try:
@@ -49,7 +60,12 @@ except Exception:
         # Fallback noop if the helper is not available in this codebase.
         return None
 from deepdoc.vision import OCR, AscendLayoutRecognizer, LayoutRecognizer, Recognizer, TableStructureRecognizer
-from rag.app.picture import vision_llm_chunk, vision_llm_chunk as picture_vision_llm_chunk
+from rag.app.picture import (
+    vision_llm_chunk,
+    vision_llm_chunk as picture_vision_llm_chunk,
+    VisionLLMCallError,
+    VisionLLMResponseError,
+)
 from rag.nlp import rag_tokenizer
 from rag.prompts.generator import vision_llm_describe_prompt
 from rag.settings import PARALLEL_DEVICES
@@ -1780,10 +1796,16 @@ class PlainParser:
         raise NotImplementedError
 
 
+class VisionParserPageError(Exception):
+    """Raised when a single page fails permanently even after retries."""
+
+
 class VisionParser(RAGFlowPdfParser):
     def __init__(self, vision_model, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.vision_model = vision_model
+        # Semaphore to limit concurrent VLM requests; created in __call__ when needed.
+        self._vlm_semaphore: Optional[Semaphore] = None
 
     def __images__(self, fnm, zoomin=3, page_from=0, page_to=299, callback=None):
         try:
@@ -1855,41 +1877,50 @@ class VisionParser(RAGFlowPdfParser):
 
         all_docs = []
 
-        for idx, img_pil in enumerate(self.page_images or []):
-            pdf_page_num = idx  # 0-based
-            if pdf_page_num < start_page or pdf_page_num >= end_page:
-                continue
-
-            # Preserve original page image size for metadata
+        # Build per-page processing helpers and optionally run in parallel.
+        img_cnt = len(self.page_images) if self.page_images else 0
+        logging.info(f"VisionParser: Processing {img_cnt} pages (from={from_page}, to={to_page}, total_pdf_pages={total_pdf_pages})")
+        all_docs = []
+ 
+        # Concurrency control
+        parallel_requests = int(os.getenv("PARALLEL_VLM_REQUESTS", "1"))
+        if parallel_requests > 1:
+            self._vlm_semaphore = Semaphore(parallel_requests)
+        else:
+            self._vlm_semaphore = None
+ 
+        def _process_page_sync(idx, img_pil, pdf_page_num, zoomin, prompt_text, callback, img_cnt):
+            """
+            Synchronous per-page processing copied from the original sequential loop.
+            Returns (idx, cleaned_text, meta_str)
+            """
             orig_width, orig_height = img_pil.size
             logging.debug(f"VisionParser: Page {idx+1}/{img_cnt}: Original size {orig_width}x{orig_height}")
-
             try:
                 # Convert to RGB
                 img = img_pil.convert("RGB")
-
+ 
                 # Get resize factor from environment variable or default to 32
                 resize_factor = int(os.getenv("VLM_RESIZE_FACTOR", "32"))
-                
+ 
                 # Apply smart_resize to ensure dimensions are multiples of the factor
-                # and maintain proper aspect ratio with max 1024 on the long dimension
                 width, height = img.size
                 target_height, target_width = smart_resize(
                     height, width,
                     factor=resize_factor,
-                    target_max_dimension=1024  # Balanced resolution for general use
+                    target_max_dimension=1024
                 )
-                
+ 
                 # Resize the image to the calculated dimensions
                 img = img.resize((target_width, target_height), resample=Image.Resampling.LANCZOS)
                 logging.debug(f"VisionParser: Page {idx+1}: Resized from {width}x{height} to {target_width}x{target_height} (factor={resize_factor})")
-
+ 
                 # Convert to JPEG bytes
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=90, optimize=True)
                 jpg_bytes = buf.getvalue()
                 logging.debug(f"VisionParser: Page {idx+1}: JPEG bytes: {len(jpg_bytes)} bytes")
-
+ 
                 # If JPEG bytes are very large, attempt additional compression rather than failing
                 MAX_JPG_BYTES = 5 * 1024 * 1024  # 5MB
                 if len(jpg_bytes) > MAX_JPG_BYTES:
@@ -1908,20 +1939,13 @@ class VisionParser(RAGFlowPdfParser):
                         img_small.save(buf, format="JPEG", quality=60, optimize=True)
                         jpg_bytes = buf.getvalue()
                         logging.debug(f"VisionParser: Page {idx+1}: After shrink size={len(jpg_bytes)}")
-
+ 
                 # Build prompt: use provided prompt_text (with page interpolation) or default generator
                 if prompt_text is not None:
                     prompt = prompt_text.replace("{{ page }}", str(pdf_page_num + 1)) if "{{ page }}" in prompt_text else prompt_text
                 else:
                     prompt = vision_llm_describe_prompt(page=pdf_page_num + 1)
-
-                # Log prompt preview/length (trim to avoid huge logs)
-                try:
-                    preview = (prompt[:200] + "...") if len(str(prompt)) > 200 else prompt
-                    logging.debug(f"VisionParser: Page {idx+1}: Prompt length: {len(str(prompt))} chars, preview: {preview}")
-                except Exception:
-                    logging.debug(f"VisionParser: Page {idx+1}: Prompt prepared (unable to render preview)")
-
+ 
                 # Call VLM with page-level try/except to avoid whole-document failure
                 try:
                     text = picture_vision_llm_chunk(
@@ -1930,21 +1954,33 @@ class VisionParser(RAGFlowPdfParser):
                         prompt=prompt,
                         callback=callback,
                     )
-                except Exception as e:
-                    logging.error(f"Page {pdf_page_num + 1}: VLM call failed: {e}")
-                    text = f"[Page {pdf_page_num + 1}: Processing error - {str(e)[:100]}]"
-                # Progress/info per page
-                logging.info(f"VisionParser: Page {idx+1}/{img_cnt} processed by VLM")
-
-                if kwargs.get("callback"):
+                except (VisionLLMCallError, VisionLLMResponseError) as e:
+                    err_msg = f"Page {pdf_page_num + 1}: VLM call failed after retries: {e}"
+                    logging.error(err_msg)
                     try:
-                        kwargs["callback"](idx * 1.0 / img_cnt if img_cnt else 0.0, f"Processed: {idx + 1}/{img_cnt}")
+                        callback(-1, err_msg)
                     except Exception:
                         pass
-
+                    raise VisionParserPageError(err_msg) from e
+                except Exception as e:
+                    err_msg = f"Page {pdf_page_num + 1}: Unexpected VLM error: {e}"
+                    logging.exception(err_msg)
+                    try:
+                        callback(-1, err_msg)
+                    except Exception:
+                        pass
+                    raise VisionParserPageError(err_msg) from e
+                # Progress/info per page
+                logging.info(f"VisionParser: Page {idx+1}/{img_cnt} processed by VLM")
+ 
+                if callback:
+                    try:
+                        callback(idx * 1.0 / img_cnt if img_cnt else 0.0, f"Processed: {idx + 1}/{img_cnt}")
+                    except Exception:
+                        pass
+ 
                 # Normalize and robustly check VLM text
                 if isinstance(text, tuple) and len(text) >= 1:
-                    # Some models may return (text, tokens)
                     text = text[0]
                 if text is None:
                     logging.warning(f"Page {pdf_page_num + 1}: VLM returned None or no text")
@@ -1955,14 +1991,14 @@ class VisionParser(RAGFlowPdfParser):
                         text = str(text)
                     except Exception:
                         text = f"[Page {pdf_page_num + 1}: Non-string VLM output]"
-
+ 
                 # Cleanup and basic heuristics
                 cleaned = text.strip()
                 # Handle very short responses
                 if not cleaned or len(cleaned) < 10:
                     logging.warning(f"Page {pdf_page_num + 1}: Empty or very short VLM response ('{cleaned}')")
                     cleaned = f"[Page {pdf_page_num + 1}: No content detected by VLM]"
-
+ 
                 # Detect possible gibberish (low vocabulary ratio)
                 words = re.findall(r"\w+", cleaned)
                 if len(words) > 20:
@@ -1970,7 +2006,7 @@ class VisionParser(RAGFlowPdfParser):
                     vocab_ratio = len(unique_words) / len(words) if len(words) else 0.0
                     if vocab_ratio < 0.3:
                         logging.warning(f"Page {pdf_page_num + 1}: Possible gibberish detected (vocab ratio: {vocab_ratio:.2f})")
-
+ 
                 # Detect repeated patterns that might indicate model confusion
                 if len(cleaned) > 100:
                     for pattern_len in (50, 100):
@@ -1979,25 +2015,62 @@ class VisionParser(RAGFlowPdfParser):
                             if cleaned.count(pattern) >= 3:
                                 logging.warning(f"Page {pdf_page_num + 1}: Detected repeated pattern, possible model error")
                                 break
-
+ 
                 # Warn on excessively long responses
                 if len(cleaned) > 50000:
                     logging.warning(f"Page {pdf_page_num + 1}: Very long VLM response: {len(cleaned)} chars, consider truncation")
-
-                width, height = orig_width, orig_height
-                all_docs.append((
-                    cleaned,
-                    f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{width / zoomin:.1f}\t{0.0:.1f}\t{height / zoomin:.1f}##"
-                ))
+ 
+                meta = f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{orig_width / zoomin:.1f}\t{0.0:.1f}\t{orig_height / zoomin:.1f}##"
+                return idx, cleaned, meta
             except Exception as e:
                 logging.error(f"Page {pdf_page_num + 1}: Processing failed: {e}")
-                # Add fallback entry instead of crashing whole document
-                all_docs.append((
-                    f"[Page {pdf_page_num + 1}: Processing error - {str(e)[:100]}]",
-                    f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{orig_width / zoomin:.1f}\t{0.0:.1f}\t{orig_height / zoomin:.1f}##"
-                ))
-                # continue to next page
+                meta = f"@@{pdf_page_num + 1}\t{0.0:.1f}\t{orig_width / zoomin:.1f}\t{0.0:.1f}\t{orig_height / zoomin:.1f}##"
+                return idx, f"[Page {pdf_page_num + 1}: Processing error - {str(e)[:100]}]", meta
+ 
+        async def _execute_page_processing(idx, img_pil, pdf_page_num, zoomin, prompt_text, callback, img_cnt):
+            """
+            Async wrapper that optionally gates concurrency with a semaphore and runs the sync worker in a thread.
+            """
+            if self._vlm_semaphore:
+                async with self._vlm_semaphore:
+                    return await asyncio.to_thread(_process_page_sync, idx, img_pil, pdf_page_num, zoomin, prompt_text, callback, img_cnt)
+            return await asyncio.to_thread(_process_page_sync, idx, img_pil, pdf_page_num, zoomin, prompt_text, callback, img_cnt)
+ 
+        # Build task list (preserve order via returned indices)
+        page_tasks = []
+        page_indices = []
+        for idx, img_pil in enumerate(self.page_images or []):
+            pdf_page_num = idx
+            if pdf_page_num < start_page or pdf_page_num >= end_page:
                 continue
+            page_indices.append(idx)
+            # Prepare prompt per page (do not call VLM here)
+            if prompt_text is not None:
+                ptext = prompt_text.replace("{{ page }}", str(pdf_page_num + 1)) if "{{ page }}" in prompt_text else prompt_text
+            else:
+                ptext = vision_llm_describe_prompt(page=pdf_page_num + 1)
+ 
+            if parallel_requests > 1:
+                page_tasks.append(_execute_page_processing(idx, img_pil, pdf_page_num, zoomin, ptext, callback, img_cnt))
+            else:
+                # Sequential path: run sync worker directly to preserve exact existing behavior
+                _, cleaned, meta = _process_page_sync(idx, img_pil, pdf_page_num, zoomin, ptext, callback, img_cnt)
+                all_docs.append((cleaned, meta))
+ 
+        # Execute parallel tasks if any were created
+        if parallel_requests > 1 and page_tasks:
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                results = loop.run_until_complete(asyncio.gather(*page_tasks))
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+            # Sort and append results in page order
+            results.sort(key=lambda r: r[0])
+            for _idx, cleaned, meta in results:
+                all_docs.append((cleaned, meta))
+ 
         return all_docs, []
 
 

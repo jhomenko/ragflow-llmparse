@@ -37,7 +37,13 @@ class WorkingVLMClient:
 
         logger.info("WorkingVLMClient initialized: base_url=%s", self.base_url)
 
-    def describe_image(self, image_bytes: bytes, prompt: str, model_name: str = "Qwen2.5VL-3B") -> Tuple[str, int]:
+    def describe_image(
+        self,
+        image_bytes: bytes,
+        prompt: str,
+        model_name: str = "Qwen2.5VL-3B",
+        temperature: float = 0.1,
+    ) -> Tuple[str, int]:
         """
         Describe an image using the working VLM code path.
 
@@ -79,10 +85,10 @@ class WorkingVLMClient:
                 ],
             }
 
-            logger.info(f"Calling VLM: model={model_name} prompt_len={len(prompt)}")
+            logger.info(f"Calling VLM: model={model_name} prompt_len={len(prompt)} temperature={temperature}")
 
             # ADD: Log exact parameters being sent
-            logger.info("VLM call parameters: max_tokens=8192, temperature=0.1, stop=[]")
+            logger.info("VLM call parameters: max_tokens=8192, stop=[]")
             try:
                 logger.info(f"System message length: {len(system_message['content'])}")
             except Exception:
@@ -96,7 +102,7 @@ class WorkingVLMClient:
                 model=model_name,
                 messages=[system_message, user_message],
                 max_tokens=8192,
-                temperature=0.1,
+                temperature=temperature,
                 stop=[],  # Explicitly disable default stop tokens
             )
 
@@ -199,7 +205,12 @@ def get_working_vlm_client(base_url: Optional[str] = None) -> WorkingVLMClient:
     return _client_instance
 
 
-def describe_image_working(image_bytes: bytes, prompt: str, model_name: str = "Qwen2.5VL-3B") -> Tuple[str, int]:
+def describe_image_working(
+    image_bytes: bytes,
+    prompt: str,
+    model_name: str = "Qwen2.5VL-3B",
+    temperature: float = 0.1,
+) -> Tuple[str, int]:
     """
     Convenience wrapper to describe image using the working client.
 
@@ -207,4 +218,4 @@ def describe_image_working(image_bytes: bytes, prompt: str, model_name: str = "Q
         (text, token_count)
     """
     client = get_working_vlm_client()
-    return client.describe_image(image_bytes, prompt, model_name)
+    return client.describe_image(image_bytes, prompt, model_name, temperature=temperature)
