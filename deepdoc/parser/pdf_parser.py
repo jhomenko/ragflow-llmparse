@@ -21,6 +21,7 @@ import random
 import re
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter, defaultdict
 from copy import deepcopy
 from io import BytesIO
@@ -186,6 +187,17 @@ class RAGFlowPdfParser:
         self.page_from = 0
         self.column_num = 1
 
+    def _resolve_table_vision_model(self):
+        """
+        Returns the LLMBundle (or compatible) instance used for VLM table parsing.
+        RAGFlow attaches parser.vision_model for this purpose; if it is missing,
+        we disable the hybrid flow and log a warning.
+        """
+        vm = getattr(self, "vision_model", None)
+        if vm is None:
+            logging.warning("_resolve_table_vision_model: vision_model is not attached; hybrid table parsing disabled")
+        return vm
+
     def __char_width(self, c):
         return (c["x1"] - c["x0"]) // max(len(c["text"]), 1)
 
@@ -310,7 +322,9 @@ class RAGFlowPdfParser:
         
         # Step 2: Optional VLM routing for tables (hybrid VLM/TableStructureRecognizer)
         env_flag = os.getenv("USE_VLM_TABLE_PARSING", "false")
-        vlm_enabled = str(env_flag).lower() == "true" and vision_present
+        vlm_requested = str(env_flag).lower() in ("1", "true", "yes", "on")
+        table_vision_model = self._resolve_table_vision_model() if vlm_requested else None
+        vlm_enabled = vlm_requested and table_vision_model is not None
         
         # Add explicit logging of environment variable values
         logging.info(f"USE_VLM_TABLE_PARSING={env_flag}, vision_model_present={vision_present}, vlm_enabled={vlm_enabled}")
@@ -318,27 +332,21 @@ class RAGFlowPdfParser:
         logging.info(f"Table parsing path: VLM={vlm_enabled}, table_count={len(imgs)}")
         
         # Add validation that required environment variables are set before attempting VLM parsing
-        if vlm_enabled and not vision_present:
-            logging.warning("_table_transformer_job: VLM parsing requested but no vision_model available; falling back to TableStructureRecognizer")
-            vlm_enabled = False
-        
+        if vlm_requested and not vlm_enabled:
+            logging.warning("_table_transformer_job: VLM parsing requested but vision_model missing; using TableStructureRecognizer only")
+
         # Verify that VLM_TABLE_MODEL environment variable is properly used when creating the vision model
-        if vlm_enabled:
-            # Check if VLM_TABLE_MODEL is set and log it
+        if vlm_enabled and table_vision_model is not None:
             table_model_env = os.getenv("VLM_TABLE_MODEL", None)
-            if table_model_env:
-                logging.info(f"VLM_TABLE_MODEL environment variable is set to: {table_model_env}")
-            else:
-                logging.info("VLM_TABLE_MODEL environment variable is not set, using default vision_model")
-        
+            if table_model_env and getattr(table_vision_model, "llm_name", None) != table_model_env:
+                logging.info("VLM_TABLE_MODEL requested '%s' but parser already has '%s'; using attached model",
+                             table_model_env, getattr(table_vision_model, "llm_name", None))
+
         recos = None
         if vlm_enabled:
-            # Allow a separate model for table parsing if provided (env override preferred)
-            table_model_env = os.getenv("VLM_TABLE_MODEL", None)
-            table_model = table_model_env if table_model_env is not None else self.vision_model
-            logging.debug(f"_table_transformer_job: selected table_model from env='{table_model_env}' type={type(table_model)}")
+            logging.debug(f"_table_transformer_job: Using VLM vision model type={type(table_vision_model)}")
             try:
-                vlm_results = self._vlm_table_parser(imgs, pos, vision_model=table_model)
+                vlm_results = self._vlm_table_parser(imgs, pos, vision_model=table_vision_model)
                 logging.debug(f"_table_transformer_job: vlm_results received: {len(vlm_results)} items")
             except Exception:
                 logging.exception("VLM table parser failed; falling back to TableStructureRecognizer for all tables")
@@ -1614,18 +1622,22 @@ class RAGFlowPdfParser:
         - Supports output_format "html" or "markdown".
         """
         try:
-            prompt_file = os.getenv("VLM_TABLE_PROMPT_PATH")
-            if not prompt_file:
-                base = Path(__file__).resolve().parent.parent.parent
-                prompt_file = base / "rag" / "prompts" / "table_vlm_prompt.md"
+            prompt_file_env = os.getenv("VLM_TABLE_PROMPT_PATH")
+            candidates = []
+            if prompt_file_env:
+                candidates.append(Path(prompt_file_env))
             else:
-                prompt_file = Path(prompt_file)
+                base = Path(__file__).resolve().parent.parent.parent
+                candidates.append(base / "rag" / "prompts" / "vision_llm_table_prompt.md")
+                candidates.append(base / "rag" / "prompts" / "table_vlm_prompt.md")
 
-            if prompt_file.exists():
-                try:
-                    return prompt_file.read_text(encoding="utf-8")
-                except Exception:
-                    logging.exception("Failed to read table prompt file; falling back to inline prompt")
+            for candidate in candidates:
+                if candidate and candidate.exists():
+                    try:
+                        return candidate.read_text(encoding="utf-8")
+                    except Exception:
+                        logging.exception("Failed to read table prompt file '%s'; trying next option", candidate)
+                        continue
         except Exception:
             logging.exception("_get_table_prompt")
 
@@ -1668,37 +1680,39 @@ class RAGFlowPdfParser:
         
         logging.info(f"_vlm_table_parser: Configuration - resize_factor={resize_factor}, timeout={timeout_env}, output_format={output_format}, fallback_enabled={fallback_enabled}")
         
-        results = []
         MAX_JPG_BYTES = 5 * 1024 * 1024  # 5 MB safety threshold
-    
-        for idx, img in enumerate(table_images):
+        parallelism = max(1, int(os.getenv("PARALLEL_VLM_TABLE_REQUESTS", "1")))
+        timeout = None
+        if timeout_env:
+            try:
+                timeout = float(timeout_env)
+            except Exception:
+                logging.warning(f"_vlm_table_parser: invalid VLM_TABLE_TIMEOUT_SEC='{timeout_env}', ignoring timeout")
+                timeout = None
+
+        results: list[Optional[str]] = [None] * len(table_images)
+
+        def _process_single_table(idx: int, img):
             table_start_time = timer()
             try:
                 if img is None:
-                    raise ValueError("Received None image for table index {}".format(idx))
-    
-                # Ensure RGB
+                    raise ValueError(f"Received None image for table index {idx}")
+
                 pil = img.convert("RGB")
-    
-                # Compute resized dims (smart_resize expects height, width)
                 width, height = pil.size
                 target_h, target_w = smart_resize(height, width, factor=resize_factor, target_max_dimension=1024)
-    
-                # Resize with LANCZOS
                 pil = pil.resize((target_w, target_h), resample=Image.Resampling.LANCZOS)
-    
-                # Convert to JPEG bytes
+
                 buf = BytesIO()
                 pil.save(buf, format="JPEG", quality=90, optimize=True)
                 jpg_bytes = buf.getvalue()
-    
-                # If too large, attempt progressive reductions (quality -> shrink)
+
                 if len(jpg_bytes) > MAX_JPG_BYTES:
                     logging.warning(f"_vlm_table_parser: table {idx} jpeg {len(jpg_bytes)} bytes > {MAX_JPG_BYTES}, trying quality=60")
                     buf = BytesIO()
                     pil.save(buf, format="JPEG", quality=60, optimize=True)
                     jpg_bytes = buf.getvalue()
-    
+
                 if len(jpg_bytes) > MAX_JPG_BYTES:
                     logging.warning(f"_vlm_table_parser: table {idx} still > {MAX_JPG_BYTES}, resizing down by 0.5")
                     new_size = (max(100, int(pil.size[0] * 0.5)), max(10, int(pil.size[1] * 0.5)))
@@ -1706,57 +1720,62 @@ class RAGFlowPdfParser:
                     buf = BytesIO()
                     pil_small.save(buf, format="JPEG", quality=60, optimize=True)
                     jpg_bytes = buf.getvalue()
-    
-                # Build prompt
+
                 prompt = self._get_table_prompt(output_format)
                 logging.debug(f"_vlm_table_parser: table {idx} prompt length: {len(prompt)} chars")
-    
-                # Call the vision LLM
+
                 try:
                     if timeout is not None:
                         out = vision_llm_chunk(binary=jpg_bytes, vision_model=vision_model, prompt=prompt, timeout=timeout)
                     else:
                         out = vision_llm_chunk(binary=jpg_bytes, vision_model=vision_model, prompt=prompt)
                 except TypeError:
-                    # If the function does not accept timeout kwarg, retry without it
                     out = vision_llm_chunk(binary=jpg_bytes, vision_model=vision_model, prompt=prompt)
-    
-                # Unwrap tuple responses (some wrappers return (text, meta))
+
                 if isinstance(out, tuple) and len(out) > 0:
                     out = out[0]
-    
-                # Normalize type
+
                 if out is None:
                     raise RuntimeError("VLM returned None")
                 if not isinstance(out, str):
-                    try:
-                        out = str(out)
-                    except Exception:
-                        raise RuntimeError("VLM returned non-string output")
-    
-                # Validate according to chosen format
+                    out = str(out)
+
                 if output_format in ("html", "htm"):
                     validated = self._validate_html_table(out)
                 else:
                     validated = self._validate_markdown_table(out)
-                    
-                # Calculate duration for this table
+
                 table_duration = timer() - table_start_time
                 logging.info(f"_vlm_table_parser: table {idx} processed in {table_duration:.2f}s")
-    
-                results.append(validated)
+                return idx, validated
             except Exception as e:
                 table_duration = timer() - table_start_time
                 logging.exception(f"_vlm_table_parser: failed parsing table {idx} after {table_duration:.2f}s - Error: {str(e)}")
-                if fallback_enabled:
-                    # Signal caller to fallback by returning None for this index
-                    results.append(None)
+                return idx, None
+
+        if parallelism > 1 and len(table_images) > 1:
+            logging.info(f"_vlm_table_parser: running with parallelism={parallelism}")
+            with ThreadPoolExecutor(max_workers=parallelism) as executor:
+                futures = [executor.submit(_process_single_table, idx, img) for idx, img in enumerate(table_images)]
+                for fut in as_completed(futures):
+                    idx, value = fut.result()
+                    results[idx] = value
+        else:
+            for idx, img in enumerate(table_images):
+                _, value = _process_single_table(idx, img)
+                results[idx] = value
+
+        # Apply fallback policy for failures
+        for idx, value in enumerate(results):
+            if value is not None:
+                continue
+            if fallback_enabled:
+                results[idx] = None  # caller will invoke TableStructureRecognizer
+            else:
+                if output_format in ("html", "htm"):
+                    results[idx] = "<table><tr><td>Table parsing failed</td></tr></table>"
                 else:
-                    # Provide a minimal error table matching requested format
-                    if output_format in ("html", "htm"):
-                        results.append("<table><tr><td>Table parsing failed</td></tr></table>")
-                    else:
-                        results.append("| Table parsing failed |")
+                    results[idx] = "| Table parsing failed |"
     
         total_duration = timer() - start_time
         logging.info(f"_vlm_table_parser: completed processing {len(table_images)} tables in {total_duration:.2f}s")

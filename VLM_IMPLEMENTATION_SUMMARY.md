@@ -1,145 +1,78 @@
 # VLM Implementation Summary
 
 ## Overview
-This document provides a concise summary of the Vision Language Model (VLM) implementation in the RAGFlow codebase. The implementation enables PDF and image parsing using VLMs, providing enhanced document processing capabilities with improved accuracy for documents containing images, charts, and complex layouts.
+RAGFlow now supports two complementary Vision-Language workflows:
 
-## Key Changes Made
+1. **Full-page VLM parsing** – every PDF page is converted to an image and transcribed by the working VLM module. This path is ideal for user guides, flowcharts, or documents whose layout repeatedly confuses classic parsers.
+2. **Hybrid DeepDoc + VLM tables/figures** – DeepDoc continues to handle page layout, OCR, and chunk metadata, while only the hard regions (tables, charts, infographics) are re-written by the VLM. This keeps DeepDoc’s speed/positional accuracy and upgrades complex visuals.
 
-### Files Created
-- `deepdoc/parser/direct_vision_parser.py` - New parser for processing images and visual inputs, extracting structured metadata and OCR/text regions
-- `rag/llm/working_vlm_module.py` - Core VLM orchestration module handling ingestion, pre-processing, and model invocation
-- `WORKING_VLM_IMPLEMENTATION_SUMMARY.md` - This summary document
+Both flows share the same retry logic, prompts, and telemetry so operators get consistent output and diagnostics regardless of which strategy is active.
 
-### Files Modified
-- `deepdoc/parser/pdf_parser.py` - Updated PDF parsing pipeline to call the new direct vision parser for embedded images and normalize extracted text chunks
-- `rag/flow/parser/parser.py` - Adjusted flow parsing to accept multimodal chunk types and propagate image metadata into chunk descriptors
-- `rag/nlp/rag_tokenizer.py` - Added tokenization handling for image-derived text and OCR noise normalization
-- `api/db/services/llm_service.py` - Exposed new VLM invocation endpoints and wiring for model selection and request tracing
-- `rag/app/picture.py` - Enhanced `vision_llm_chunk` with robust byte handling and error recovery
-- `rag/llm/cv_model.py` - Added system message support, API parameters, and proper return value handling
+## Core Improvements
 
-## Critical Bugs Fixed
+### Working VLM Module
+- `rag/llm/working_vlm_module.py`, `rag/app/picture.py`
+- Provides the single gateway for all VLM calls (full-page parsing, tables, figures).
+- Adds configurable retries with prompt hints via `VLM_PAGE_MAX_ATTEMPTS`.
+- Normalizes responses, strips fences, logs suspicious repetitions, and surfaces exceptions up the stack so ingestion either succeeds completely or fails loudly.
 
-### 1. Return Value Mismatch (Critical)
-- **Issue**: `LLMBundle.describe_with_prompt` returned only text string instead of (text, token_count) tuple
-- **Location**: `api/db/services/llm_service.py:165`
-- **Fix**: Modified to return `txt, used_tokens` tuple as expected by calling code
-- **Impact**: Result unpacking now works correctly, preventing empty responses
+### Hybrid Table + Figure Flow
+- `deepdoc/parser/pdf_parser.py`
+- DeepDoc extracts table regions and, when `USE_VLM_TABLE_PARSING=true`, routes each cropped table through `_vlm_table_parser`.
+- Concurrency is governed by `PARALLEL_VLM_TABLE_REQUESTS`; failures fall back to the original `TableStructureRecognizer`.
+- VLM responses are wrapped back into DeepDoc’s bbox schema (page number, coordinates, layout type) so downstream chunking, highlighting, and UI rendering continue to work with HTML.
+- Figures leverage `VisionFigureParser` with the refreshed `vision_llm_figure_describe_prompt.md`, producing compact Markdown summaries that can be indexed for retrieval.
 
-### 2. Missing System Message (High)
-- **Issue**: VLM was not receiving proper context about its role as a PDF transcriber
-- **Location**: `rag/llm/cv_model.py:158-164`
-- **Fix**: Added comprehensive system message to guide the VLM's behavior
-- **Impact**: Improved output quality and consistency
+### Prompt Updates
+- `rag/prompts/vision_llm_table_prompt.md` – standalone user prompt guaranteeing compact `<table>` HTML with proper `rowspan/colspan`.
+- `rag/prompts/vision_llm_figure_describe_prompt.md` – new instructions for Markdown summaries that capture labels, sequences, and captions with chunk-friendly spacing.
 
-### 3. Missing API Parameters (Medium)
-- **Issue**: No explicit `max_tokens` or `temperature` parameters, causing unpredictable behavior
-- **Location**: `rag/llm/cv_model.py:199-205`
-- **Fix**: Added `max_tokens=4096` and `temperature=0.1` parameters
-- **Impact**: Ensured consistent, complete responses
+## Files & Modules
 
-### 4. Stop Token Issue (Critical)
-- **Issue**: OpenAI Python client adding default stop tokens causing premature termination
-- **Location**: `rag/llm/cv_model.py:206`
-- **Fix**: Added `stop=[]` to explicitly disable default stop tokens
-- **Impact**: Prevented early truncation after only 6 tokens
-
-### 5. Prompt Template Issue (Medium)
-- **Issue**: Prompt template instructed VLM to add page dividers, causing it to output only "— Page 1 —"
-- **Location**: `rag/prompts/vision_llm_describe_prompt.md`
-- **Fix**: Removed page divider instruction from template
-- **Impact**: VLM now transcribes actual content instead of just page markers
-
-## Architecture Changes
-
-### Before
-- RAG pipeline treated inputs as text-first: PDF -> text extraction -> chunking -> embedding -> retrieval
-- Image content embedded in PDFs was not fully parsed; OCR and visual features were separate utilities
-
-### After
-- VLM module adds a multimodal pre-processing stage: PDF/Image -> direct_vision_parser -> multimodal chunks (text + image metadata + visual features) -> unified chunking -> embedding/retrieval
-- The pipeline is now:
-  1. Ingest (PDF/Image)
-  2. Visual/Text extraction via direct_vision_parser
-  3. Multimodal chunk normalization
-  4. Embedding + RAG retrieval
-  5. Downstream LLM consumption
-
-```
-[PDF/Image] --> [direct_vision_parser] --> [Multimodal Chunks] --> [Embedding Store] --> [Retrieval] --> [LLM]
-```
-
-## Key Improvements and Benefits
-
-- **Higher fidelity extraction**: Improved extraction of image-embedded text and visual context
-- **Unified chunk representation**: Simplifies downstream RAG logic
-- **Better retrieval relevance**: Enhanced results for documents with figures, charts, or screenshots
-- **Clear module boundaries**: Enables independent testing and reuse
-- **Configurable chunking strategies**: Auto, page, heading, and token-based strategies
-- **Robust error handling**: Per-page error recovery with fallback content
-- **Quality detection**: Identifies and flags potential gibberish or low-quality output
+| Area | Key Files | Notes |
+|------|-----------|-------|
+| Hybrid tables | `deepdoc/parser/pdf_parser.py`, `rag/prompts/vision_llm_table_prompt.md` | Enables selective VLM rewriting with fallback + concurrency |
+| Figures | `deepdoc/parser/figure_parser.py`, `rag/prompts/vision_llm_figure_describe_prompt.md` | Uses the working VLM prompt for diagram descriptions |
+| Full-page parsing | `rag/app/picture.py`, `rag/llm/working_vlm_module.py`, `rag/app/picture.py` | Retry/validation logic shared across entry points |
+| Parser wiring | `rag/flow/parser/parser.py` | Creates `LLMBundle` for hybrid mode and attaches it to `RAGFlowPdfParser` |
+| Documentation | `FINAL_VLM_IMPLEMENTATION_SUMMARY.md`, `VLM_IMPLEMENTATION_SUMMARY.md` | Updated to describe both flows and configuration |
 
 ## Configuration
 
-The VLM functionality can be configured through environment variables:
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `USE_WORKING_VLM` | Enable in-process working VLM module for all requests | `true` |
+| `VLM_BASE_URL` | Base URL for VLM server | `http://192.168.68.186:8080/v1` |
+| `VLM_PAGE_MAX_ATTEMPTS` | Attempts per page (retry adds repetition hint & warmer temperature) | `2` |
+| `USE_VLM_TABLE_PARSING` | Enable hybrid table rewriting inside DeepDoc | `false` |
+| `VLM_TABLE_MODEL` | Optional override for the LLMBundle used in hybrid mode (falls back to attached `vision_model`) | unset |
+| `VLM_TABLE_TIMEOUT_SEC` | Soft timeout per table when contacting the VLM | unset |
+| `PARALLEL_VLM_TABLE_REQUESTS` | Max concurrent hybrid table requests | `1` |
+| `VLM_TABLE_OUTPUT_FORMAT` | `html` or `markdown` output for tables (UI expects HTML) | `html` |
+| `PARALLEL_VLM_REQUESTS` | Controls VisionParser semaphore for full-page parsing | `1` |
 
-- `USE_WORKING_VLM` (default: true) - Enable the in-process working VLM module
-- `VLM_BASE_URL` (default: http://192.168.68.186:8080/v1) - Base URL for VLM server
-- `VLM_TIMEOUT_SEC` (default: 60) - Request timeout in seconds
-- `VLM_MAX_PAGE_SIZE` (default: 5MB) - Maximum allowed size per page image
-- `VLM_RETRY_COUNT` (default: 2) - Number of retries for transient errors
+## Data Flow Summary
 
-## Testing Strategy
+1. **DeepDoc-only** (`parse_method="deepdoc"`, `USE_VLM_TABLE_PARSING=false`): standard DeepDoc pipeline produces HTML snippets per layout block. HTML is stored as `content_with_weight` and rendered directly in the UI.
+2. **Hybrid** (`parse_method="deepdoc"`, `USE_VLM_TABLE_PARSING=true`):
+   - DeepDoc detects table coordinates → crops → `_vlm_table_parser` (working VLM) → validated HTML.
+   - HTML replaces only the table nodes; everything else (text blocks, headings, positions) remains untouched.
+   - If the VLM fails, TableStructureRecognizer’s output is used automatically.
+3. **Full VLM** (`parse_method` set to a VLM model): VisionParser renders every page to JPEG and calls `vision_llm_chunk`. Markdown is stored as-is for retrieval; convert to HTML at render time if desired.
 
-- Unit tests: Validate parsing logic, OCR fallback, and chunk normalization
-- Integration tests: End-to-end ingestion -> retrieval -> LLM prompt flow
-- Manual tests: Sample PDFs with diagrams/charts, images with captions, and noisy scans
+## Testing & Validation
 
-## Deployment Instructions
+- `test/test_vlm_parallel.py` – validates per-page concurrency, failure propagation, and cancellation handling.
+- `test/test_vision_llm_chunk_retry.py` – ensures repetition detection triggers retries and raises structured errors when exhausted.
+- `test_vlm_table_hybrid.py` – diagnostic harness to run DeepDoc with hybrid tables enabled against real PDFs.
 
-1. Ensure dependencies are installed (see `pyproject.toml` and container requirements)
-2. Rebuild the backend container:
-   ```bash
-   # from repo root
-   docker-compose build backend
-   docker-compose up -d backend
-   ```
-3. Run migrations (if applicable) and restart services
-4. For GPU/accelerated inference, use the GPU compose files: `docker/docker-compose-gpu.yml`
+Manual checks:
+- Toggle `USE_VLM_TABLE_PARSING` to confirm DeepDoc chunks retain HTML and bounding boxes while tables become VLM HTML.
+- Inspect logs for `_vlm_table_parser: table X processed` vs. fallback warnings to verify the retry/fallback flow.
 
-## Success Criteria
+## Operational Guidance
 
-- VLM returns 1000-5000 characters per page (vs previous 14 characters)
-- Token count is 500-2000+ (vs previous 6 tokens)
-- Response contains full markdown transcription with proper formatting
-- Chunks have actual content for RAG retrieval
-- No regressions in text-only document handling
-- Retrieval relevance improves on documents with visual content
-
-## Rollback Plan
-
-If issues arise, revert the changed files via git to the commit prior to this implementation:
-
-```bash
-git checkout -- deepdoc/parser/pdf_parser.py
-git checkout -- rag/flow/parser/parser.py
-git checkout -- rag/nlp/rag_tokenizer.py
-git checkout -- api/db/services/llm_service.py
-git checkout -- rag/app/picture.py
-git checkout -- rag/llm/cv_model.py
-```
-
-Then re-deploy the previous container images:
-```bash
-docker-compose down
-docker-compose pull
-docker-compose up -d
-```
-
-## Future Enhancements
-
-- Parallel page processing for improved throughput
-- OCR fallback on VLM failure for higher reliability
-- Custom chunking rules per document type
-- Caching of VLM results to reduce API costs
-- Performance benchmarks and optimization
+- Stick with DeepDoc-only for extremely high throughput scenarios with clean tables.
+- Enable hybrid mode when colored headers, merged cells, or screenshots are common; it adds a small VLM cost only for affected tables.
+- Use full VLM parsing when documents are predominantly visual or when DeepDoc frequently misses layout context (e.g., flowcharts).
+- Remember UI rendering expects HTML. When storing Markdown (full VLM path), convert to HTML before display or adopt a Markdown renderer in the frontend.
