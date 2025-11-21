@@ -212,7 +212,7 @@ def main():
     parser.add_argument('--worker-port', type=int, default=9000,
                        help='Worker服务器端口 (默认: 9000)')
     parser.add_argument('--accelerator', type=str, default='auto',
-                       choices=['auto', 'cuda', 'cpu', 'mps'],
+                       choices=['auto', 'cuda', 'xpu', 'cpu', 'mps'],
                        help='加速器类型 (默认: auto，自动检测)')
     parser.add_argument('--workers-per-device', type=int, default=1,
                        help='每个GPU的worker数量 (默认: 1)')
@@ -253,4 +253,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

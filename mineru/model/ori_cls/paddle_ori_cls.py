@@ -11,12 +11,19 @@ import onnxruntime
 
 from mineru.utils.enum_class import ModelPath
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
+from mineru.utils.config_reader import get_openvino_device, get_onnxruntime_providers
 
 
 class PaddleOrientationClsModel:
     def __init__(self, ocr_engine):
+        ov_device = get_openvino_device()
+        providers = get_onnxruntime_providers(ov_device)
+        sess_kwargs = {}
+        if providers:
+            sess_kwargs["providers"] = providers
         self.sess = onnxruntime.InferenceSession(
-            os.path.join(auto_download_and_get_model_root_path(ModelPath.paddle_orientation_classification), ModelPath.paddle_orientation_classification)
+            os.path.join(auto_download_and_get_model_root_path(ModelPath.paddle_orientation_classification), ModelPath.paddle_orientation_classification),
+            **sess_kwargs,
         )
         self.ocr_engine = ocr_engine
         self.less_length = 256

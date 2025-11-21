@@ -90,6 +90,48 @@ def get_device():
         return "cpu"
 
 
+def _str_to_bool(val: str) -> bool:
+    return str(val).lower() in ['1', 'true', 'yes', 'y', 'on']
+
+
+def get_use_openvino() -> bool:
+    """Global switch to enable OpenVINO-backed inference where supported."""
+    return _str_to_bool(os.getenv('MINERU_USE_OPENVINO', '0'))
+
+
+def get_openvino_device(default: str = "intel:gpu") -> str:
+    """
+    Normalize the OpenVINO device string.
+    Examples: 'intel:gpu', 'intel:cpu', 'GPU', 'CPU', 'AUTO'
+    """
+    env_val = os.getenv('MINERU_OPENVINO_DEVICE', '').strip()
+    if not env_val:
+        return default
+    env_val = env_val.lower()
+    if env_val in ["gpu", "intel:gpu"]:
+        return "intel:gpu"
+    if env_val in ["cpu", "intel:cpu"]:
+        return "intel:cpu"
+    if env_val == "auto":
+        return "AUTO"
+    return env_val
+
+
+def get_onnxruntime_providers(ov_device: str = None):
+    """
+    Build an ONNXRuntime providers list that prefers OpenVINO EP when enabled.
+    Returns None to use ORT defaults if OV is not requested or EP is unavailable.
+    """
+    if not get_use_openvino():
+        return None
+    device_type = "CPU"
+    if ov_device:
+        if ov_device.lower().startswith("intel:gpu") or ov_device.lower() == "gpu":
+            device_type = "GPU"
+        elif ov_device.lower() in ["auto"]:
+            device_type = "AUTO"
+    return [("OpenVINOExecutionProvider", {"device_type": device_type})]
+
 def get_formula_enable(formula_enable):
     formula_enable_env = os.getenv('MINERU_FORMULA_ENABLE')
     formula_enable = formula_enable if formula_enable_env is None else formula_enable_env.lower() == 'true'

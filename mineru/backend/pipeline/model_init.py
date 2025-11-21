@@ -16,6 +16,28 @@ from ...model.table.rec.slanet_plus.main import RapidTableModel
 from ...model.table.rec.unet_table.main import UnetTableModel
 from ...utils.enum_class import ModelPath
 from ...utils.models_download_utils import auto_download_and_get_model_root_path
+from ...utils.config_reader import get_use_openvino, get_openvino_device
+
+
+def _resolve_openvino_weight_path(weight_path: str, use_openvino: bool):
+    """
+    If OpenVINO is requested and a sibling `<name>_openvino_model` folder exists
+    next to the .pt, prefer that folder. Otherwise, return the original path.
+    """
+    if not (use_openvino and weight_path):
+        return weight_path
+    # If a directory was already provided, just return it.
+    if os.path.isdir(weight_path):
+        return weight_path
+    base, ext = os.path.splitext(weight_path)
+    if ext.lower() == ".pt":
+        ov_dir = base + "_openvino_model"
+        if os.path.isdir(ov_dir):
+            logger.info(f"Using OpenVINO model at {ov_dir} (from {weight_path})")
+            return ov_dir
+        else:
+            logger.warning(f"OpenVINO requested but folder not found: {ov_dir}; using {weight_path}")
+    return weight_path
 
 MFR_MODEL = os.getenv('MINERU_FORMULA_CH_SUPPORT', 'False')
 if MFR_MODEL.lower() in ['true', '1', 'yes']:
@@ -70,10 +92,11 @@ def wireless_table_model_init(lang=None):
     return table_model
 
 
-def mfd_model_init(weight, device='cpu'):
+def mfd_model_init(weight, device='cpu', use_openvino: bool = False, ov_device: str = None):
     if str(device).startswith('npu'):
         device = torch.device(device)
-    mfd_model = YOLOv8MFDModel(weight, device)
+    resolved_weight = _resolve_openvino_weight_path(weight, use_openvino)
+    mfd_model = YOLOv8MFDModel(resolved_weight, device, use_openvino=use_openvino, ov_device=ov_device)
     return mfd_model
 
 
@@ -88,10 +111,11 @@ def mfr_model_init(weight_dir, device='cpu'):
     return mfr_model
 
 
-def doclayout_yolo_model_init(weight, device='cpu'):
+def doclayout_yolo_model_init(weight, device='cpu', use_openvino: bool = False, ov_device: str = None):
     if str(device).startswith('npu'):
         device = torch.device(device)
-    model = DocLayoutYOLOModel(weight, device)
+    resolved_weight = _resolve_openvino_weight_path(weight, use_openvino)
+    model = DocLayoutYOLOModel(resolved_weight, device, use_openvino=use_openvino, ov_device=ov_device)
     return model
 
 def ocr_model_init(det_db_box_thresh=0.3,
@@ -143,6 +167,22 @@ class AtomModelSingleton:
                 kwargs.get('det_db_unclip_ratio', 1.8),
                 kwargs.get('enable_merge_det_boxes', True)
             )
+        elif atom_model_name in [AtomicModel.Layout]:
+            key = (
+                atom_model_name,
+                kwargs.get('doclayout_yolo_weights'),
+                kwargs.get('device'),
+                kwargs.get('use_openvino', False),
+                kwargs.get('ov_device')
+            )
+        elif atom_model_name in [AtomicModel.MFD]:
+            key = (
+                atom_model_name,
+                kwargs.get('mfd_weights'),
+                kwargs.get('device'),
+                kwargs.get('use_openvino', False),
+                kwargs.get('ov_device')
+            )
         else:
             key = atom_model_name
 
@@ -155,12 +195,16 @@ def atom_model_init(model_name: str, **kwargs):
     if model_name == AtomicModel.Layout:
         atom_model = doclayout_yolo_model_init(
             kwargs.get('doclayout_yolo_weights'),
-            kwargs.get('device')
+            kwargs.get('device'),
+            kwargs.get('use_openvino', False),
+            kwargs.get('ov_device')
         )
     elif model_name == AtomicModel.MFD:
         atom_model = mfd_model_init(
             kwargs.get('mfd_weights'),
-            kwargs.get('device')
+            kwargs.get('device'),
+            kwargs.get('use_openvino', False),
+            kwargs.get('ov_device')
         )
     elif model_name == AtomicModel.MFR:
         atom_model = mfr_model_init(
@@ -205,6 +249,8 @@ class MineruPipelineModel:
         self.apply_table = self.table_config.get('enable', True)
         self.lang = kwargs.get('lang', None)
         self.device = kwargs.get('device', 'cpu')
+        self.use_openvino = get_use_openvino()
+        self.openvino_device = get_openvino_device()
         logger.info(
             'DocAnalysis init, this may take some times......'
         )
@@ -218,6 +264,8 @@ class MineruPipelineModel:
                     os.path.join(auto_download_and_get_model_root_path(ModelPath.yolo_v8_mfd), ModelPath.yolo_v8_mfd)
                 ),
                 device=self.device,
+                use_openvino=self.use_openvino,
+                ov_device=self.openvino_device,
             )
 
             # 初始化公式解析模型
@@ -242,6 +290,8 @@ class MineruPipelineModel:
                 os.path.join(auto_download_and_get_model_root_path(ModelPath.doclayout_yolo), ModelPath.doclayout_yolo)
             ),
             device=self.device,
+            use_openvino=self.use_openvino,
+            ov_device=self.openvino_device,
         )
         # 初始化ocr
         self.ocr_model = atom_model_manager.get_atom_model(

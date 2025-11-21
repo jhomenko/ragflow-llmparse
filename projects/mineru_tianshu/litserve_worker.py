@@ -84,13 +84,15 @@ class MinerUWorkerAPI(ls.LitAPI):
         # 关键修复：设置 CUDA_VISIBLE_DEVICES 限制进程只能看到分配的 GPU
         # 这样可以防止一个进程占用多张卡的显存
         if device != 'auto' and device != 'cpu' and ':' in str(device):
-            # 从 'cuda:0' 提取设备ID '0'
-            device_id = str(device).split(':')[-1]
-            os.environ['CUDA_VISIBLE_DEVICES'] = device_id
-            # 设置为 cuda:0，因为对进程来说只能看到一张卡（逻辑ID变为0）
-            os.environ['MINERU_DEVICE_MODE'] = 'cuda:0'
+            prefix, device_id = str(device).split(':', 1)
+            if prefix == 'cuda':
+                os.environ['CUDA_VISIBLE_DEVICES'] = device_id
+                logical = 'cuda:0'
+                logger.info(f"🔒 CUDA_VISIBLE_DEVICES={device_id} (Physical GPU {device_id} → Logical GPU 0)")
+            else:
+                logical = f"{prefix}:{device_id}"
+            os.environ['MINERU_DEVICE_MODE'] = logical
             device_mode = os.environ['MINERU_DEVICE_MODE']
-            logger.info(f"🔒 CUDA_VISIBLE_DEVICES={device_id} (Physical GPU {device_id} → Logical GPU 0)")
         else:
             # 配置 MinerU 环境
             if os.getenv('MINERU_DEVICE_MODE', None) is None:
@@ -99,11 +101,11 @@ class MinerUWorkerAPI(ls.LitAPI):
         
         # 配置显存
         if os.getenv('MINERU_VIRTUAL_VRAM_SIZE', None) is None:
-            if device_mode.startswith("cuda") or device_mode.startswith("npu"):
+            if device_mode.startswith(("cuda", "npu", "xpu")):
                 try:
-                    vram = round(get_vram(device_mode))
-                    os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = str(vram)
-                except:
+                    vram = get_vram(device_mode)
+                    os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = str(round(vram) if vram is not None else 8)
+                except Exception:
                     os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = '8'  # 默认值
             else:
                 os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = '1'
@@ -542,5 +544,4 @@ if __name__ == '__main__':
         poll_interval=args.poll_interval,
         enable_worker_loop=not args.disable_worker_loop
     )
-
 

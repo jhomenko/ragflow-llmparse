@@ -142,6 +142,11 @@ class PytorchPaddleOCR(TextSystem):
         parser = utility.init_args()
         args = parser.parse_args(args)
 
+        backend = os.getenv("MINERU_OCR_BACKEND", "torch").lower()
+        if backend not in ["torch", "pytorch"]:
+            logger.warning(f"MINERU_OCR_BACKEND={backend} not implemented yet, falling back to torch backend.")
+        self.ocr_backend = "torch"
+
         self.lang = kwargs.get('lang', 'ch')
         self.enable_merge_det_boxes = kwargs.get("enable_merge_det_boxes", True)
 
@@ -296,5 +301,4 @@ if __name__ == '__main__':
         tmp_res = [[box.tolist(), res] for box, res in zip(dt_boxes, rec_res)]
         ocr_res.append(tmp_res)
     print(ocr_res)
-
 

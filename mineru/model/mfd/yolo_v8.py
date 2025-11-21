@@ -8,6 +8,11 @@ from PIL import Image, ImageDraw
 from mineru.utils.enum_class import ModelPath
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
 
+try:
+    from ultralytics import YOLO as UltralyticsYOLO
+except Exception:
+    UltralyticsYOLO = None
+
 
 class YOLOv8MFDModel:
     def __init__(
@@ -17,9 +22,17 @@ class YOLOv8MFDModel:
         imgsz: int = 1888,
         conf: float = 0.25,
         iou: float = 0.45,
+        use_openvino: bool = False,
+        ov_device: str = None,
     ):
-        self.model = YOLO(weight).to(device)
-        self.device = device
+        self.is_openvino = use_openvino
+        if self.is_openvino and UltralyticsYOLO is not None:
+            self.model = UltralyticsYOLO(weight)
+            self.ov_device = ov_device or device
+        else:
+            self.is_openvino = False
+            self.model = YOLO(weight).to(device)
+            self.device = device
         self.imgsz = imgsz
         self.conf = conf
         self.iou = iou
@@ -29,15 +42,23 @@ class YOLOv8MFDModel:
         inputs: Union[np.ndarray, Image.Image, List],
         is_batch: bool = False
     ) -> List:
-        preds = self.model.predict(
-            inputs,
-            imgsz=self.imgsz,
-            conf=self.conf,
-            iou=self.iou,
-            verbose=False,
-            device=self.device
-        )
-        return [pred.cpu() for pred in preds] if is_batch else preds[0].cpu()
+        predict_kwargs = {
+            "imgsz": self.imgsz,
+            "conf": self.conf,
+            "iou": self.iou,
+            "verbose": False,
+        }
+        if self.is_openvino and getattr(self, "ov_device", None):
+            predict_kwargs["device"] = self.ov_device
+        elif hasattr(self, "device"):
+            predict_kwargs["device"] = self.device
+
+        preds = self.model.predict(inputs, **predict_kwargs)
+
+        def _to_cpu(obj):
+            return obj.cpu() if hasattr(obj, "cpu") else obj
+
+        return [_to_cpu(pred) for pred in preds] if is_batch else _to_cpu(preds[0])
 
     def predict(self, image: Union[np.ndarray, Image.Image]):
         return self._run_predict(image)
@@ -66,14 +87,21 @@ class YOLOv8MFDModel:
             image = Image.fromarray(image)
 
         formula_list = []
-        for xyxy, conf, cla in zip(
-                results.boxes.xyxy.cpu(), results.boxes.conf.cpu(), results.boxes.cls.cpu()
-        ):
-            xmin, ymin, xmax, ymax = [int(p.item()) for p in xyxy]
+        def _to_cpu_array(x):
+            if hasattr(x, "cpu"):
+                return x.cpu().numpy()
+            return np.asarray(x)
+
+        xyxy_arr = _to_cpu_array(results.boxes.xyxy)
+        conf_arr = _to_cpu_array(results.boxes.conf)
+        cls_arr = _to_cpu_array(results.boxes.cls)
+
+        for xyxy, conf, cla in zip(xyxy_arr, conf_arr, cls_arr):
+            xmin, ymin, xmax, ymax = [int(p) for p in xyxy]
             new_item = {
-                "category_id": 13 + int(cla.item()),
+                "category_id": 13 + int(cla.item() if hasattr(cla, "item") else cla),
                 "poly": [xmin, ymin, xmax, ymin, xmax, ymax, xmin, ymax],
-                "score": round(float(conf.item()), 2),
+                "score": round(float(conf.item() if hasattr(conf, "item") else conf), 2),
             }
             formula_list.append(new_item)
 

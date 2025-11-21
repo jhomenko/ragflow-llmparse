@@ -1,0 +1,42 @@
+# Use the official OpenVINO runtime image with Intel GPU support
+FROM openvino/ubuntu22_runtime:latest
+
+USER root
+
+# Install libgl for opencv support & Noto fonts for Chinese characters
+RUN apt-get update && \
+    apt-get install -y \
+        fonts-noto-core \
+        fonts-noto-cjk \
+        fontconfig \
+        libgl1 \
+        libglib2.0-0 && \
+    fc-cache -fv && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install torchvision CPU wheel for full operator coverage
+RUN python3 -m pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    torchvision==0.24.1 && \
+    python3 -m pip cache purge
+
+# Install PyTorch + torchaudio XPU wheels without touching torchvision
+RUN python3 -m pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/xpu \
+    torch==2.9.1 torchaudio==2.9.1 --no-deps && \
+    python3 -m pip cache purge
+
+# Ensure transformers is present for the VLM backend
+RUN python3 -m pip install --no-cache-dir transformers && \
+    python3 -m pip cache purge
+
+# Install mineru with OpenVINO ONNX Runtime EP
+RUN python3 -m pip install --no-cache-dir onnxruntime-openvino 'mineru[core]' --break-system-packages && \
+    python3 -m pip cache purge
+
+# Download models and update the configuration file
+RUN /bin/bash -c "mineru-models-download -s huggingface -m all"
+
+# Set the entry point to activate the virtual environment and run the command line tool
+ENTRYPOINT ["/bin/bash", "-c", "export MINERU_MODEL_SOURCE=local && exec \"$@\"", "--"]

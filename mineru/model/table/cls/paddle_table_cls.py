@@ -10,12 +10,19 @@ from tqdm import tqdm
 from mineru.backend.pipeline.model_list import AtomicModel
 from mineru.utils.enum_class import ModelPath
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
+from mineru.utils.config_reader import get_openvino_device, get_onnxruntime_providers
 
 
 class PaddleTableClsModel:
     def __init__(self):
+        ov_device = get_openvino_device()
+        providers = get_onnxruntime_providers(ov_device)
+        sess_kwargs = {}
+        if providers:
+            sess_kwargs["providers"] = providers
         self.sess = onnxruntime.InferenceSession(
-            os.path.join(auto_download_and_get_model_root_path(ModelPath.paddle_table_cls), ModelPath.paddle_table_cls)
+            os.path.join(auto_download_and_get_model_root_path(ModelPath.paddle_table_cls), ModelPath.paddle_table_cls),
+            **sess_kwargs,
         )
         self.less_length = 256
         self.cw, self.ch = 224, 224

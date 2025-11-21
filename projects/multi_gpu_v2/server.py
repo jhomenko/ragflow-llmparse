@@ -24,10 +24,13 @@ class MinerUAPI(ls.LitAPI):
             os.environ['MINERU_DEVICE_MODE'] = device if device != 'auto' else get_device()
 
         device_mode = os.environ['MINERU_DEVICE_MODE']
-        if os.getenv('MINERU_VIRTUAL_VRAM_SIZE', None) == None:
-            if device_mode.startswith("cuda") or device_mode.startswith("npu"):
-                vram = round(get_vram(device_mode))
-                os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = str(vram)
+        if os.getenv('MINERU_VIRTUAL_VRAM_SIZE', None) is None:
+            if device_mode.startswith(("cuda", "npu", "xpu")):
+                vram = get_vram(device_mode)
+                if vram is not None:
+                    os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = str(round(vram))
+                else:
+                    os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = '1'
             else:
                 os.environ['MINERU_VIRTUAL_VRAM_SIZE'] = '1'
         logger.info(f"MINERU_VIRTUAL_VRAM_SIZE: {os.environ['MINERU_VIRTUAL_VRAM_SIZE']}")
