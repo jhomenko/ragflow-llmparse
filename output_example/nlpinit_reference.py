@@ -839,68 +839,8 @@ def naive_merge(sections: str | list, chunk_token_num=128, delimiter="\n。；�
 
     for sec, pos in sections:
         add_chunk("\n"+sec, pos)
- 
+
     return cks
- 
- 
-def heading_level_merge(
-    sections: list[tuple],
-    heading_level: int = 2,
-    chunk_token_num: int = 128,
-) -> list[str]:
-    """
-    Merge MinerU VLM sections by heading level with optional token limits.
- 
-    Args:
-        sections: Iterable of (text, position_tag) or (text, position_tag, text_level)
-        heading_level: Split whenever a heading of this level or higher appears.
-        chunk_token_num: Maximum tokens per chunk (0 disables token limit).
-    """
-    if not sections:
-        return []
- 
-    chunks: list[str] = []
-    current_chunk: list[str] = []
-    current_tokens = 0
- 
-    for section in sections:
-        if len(section) >= 3:
-            text, pos_tag, text_level = section[0], section[1], section[2]
-        else:
-            text = section[0]
-            pos_tag = section[1] if len(section) > 1 else ""
-            text_level = None
- 
-        if not text:
-            continue
- 
-        text = text.strip()
-        if not text:
-            continue
- 
-        text_tokens = num_tokens_from_string(text)
-        should_split = text_level is not None and text_level <= heading_level
- 
-        if should_split and current_chunk:
-            chunks.append("\n".join(current_chunk))
-            current_chunk = []
-            current_tokens = 0
- 
-        if pos_tag and text_tokens >= 8:
-            current_chunk.append(text + pos_tag)
-        else:
-            current_chunk.append(text)
-        current_tokens += text_tokens
- 
-        if chunk_token_num > 0 and current_tokens > chunk_token_num:
-            chunks.append("\n".join(current_chunk))
-            current_chunk = []
-            current_tokens = 0
- 
-    if current_chunk:
-        chunks.append("\n".join(current_chunk))
- 
-    return chunks
 
 
 def naive_merge_with_images(texts, images, chunk_token_num=128, delimiter="\n。；！？", overlapped_percent=0):
@@ -1053,9 +993,12 @@ def naive_merge_docx(sections, chunk_token_num=128, delimiter="\n。；！？"):
         for sec, image in sections:
             split_sec = re.split(pattern, sec)
             for sub_sec in split_sec:
-                if not sub_sec or re.match(f"^{dels}$", sub_sec):
+                if not sub_sec or re.fullmatch(custom_pattern, sub_sec):
                     continue
-                add_chunk("\n" + sub_sec, image, "")
+                text_seg = "\n" + sub_sec
+                cks.append(text_seg)
+                images.append(image)
+                tk_nums.append(num_tokens_from_string(text_seg))
         return cks, images
 
     for sec, image in sections:

@@ -51,6 +51,11 @@ class MinerUContentType(StrEnum):
     CODE = "code"
     LIST = "list"
     DISCARDED = "discarded"
+    # VLM backend additional types (typically discarded for RAG)
+    HEADER = "header"
+    FOOTER = "footer"
+    PAGE_NUMBER = "page_number"
+    TITLE = "title"
 
 
 class MinerUParser(RAGFlowPdfParser):
@@ -97,7 +102,7 @@ class MinerUParser(RAGFlowPdfParser):
 
     def _is_http_endpoint_valid(self, url, timeout=5):
         try:
-            response = requests.head(url, timeout=timeout, allow_redirects=True)
+            response = requests.get(url, timeout=timeout, allow_redirects=True)
             return response.status_code in [200, 301, 302, 307, 308]
         except Exception:
             return False
@@ -126,27 +131,9 @@ class MinerUParser(RAGFlowPdfParser):
             server_url = self.mineru_server_url
 
         if backend == "vlm-http-client" and server_url:
-            try:
-                server_accessible = self._is_http_endpoint_valid(server_url + "/openapi.json")
-                logging.info(f"[MinerU] vlm-http-client server check: {server_accessible}")
-                if server_accessible:
-                    self.using_api = False  # We are using http client, not API
-                    return True, reason
-                else:
-                    reason = f"[MinerU] vlm-http-client server not accessible: {server_url}"
-                    logging.warning(f"[MinerU] vlm-http-client server not accessible: {server_url}")
-                    return False, reason
-            except Exception as e:
-                logging.warning(f"[MinerU] vlm-http-client server check failed: {e}")
-                try:
-                    response = requests.get(server_url, timeout=5)
-                    logging.info(f"[MinerU] vlm-http-client server connection check: success with status {response.status_code}")
-                    self.using_api = False
-                    return True, reason
-                except Exception as e:
-                    reason = f"[MinerU] vlm-http-client server connection check failed: {server_url}: {e}"
-                    logging.warning(f"[MinerU] vlm-http-client server connection check failed: {server_url}: {e}")
-                    return False, reason
+            logging.info(f"[MinerU] vlm-http-client backend selected with server: {server_url}")
+            self.using_api = True
+            return True, reason
 
         try:
             result = subprocess.run([str(self.mineru_path), "--version"], **subprocess_kwargs)
@@ -450,6 +437,13 @@ class MinerUParser(RAGFlowPdfParser):
         return pic
 
     @staticmethod
+    def _strip_vlm_tokens(text: str) -> str:
+        """Strip VLM-specific tokens like <|im_end|> from text."""
+        if text:
+            return text.replace("<|im_end|>", "").strip()
+        return text
+
+    @staticmethod
     def extract_positions(txt: str):
         poss = []
         for tag in re.findall(r"@@[0-9-]+\t[0-9.\t]+##", txt):
@@ -459,13 +453,23 @@ class MinerUParser(RAGFlowPdfParser):
         return poss
 
     def _read_output(self, output_dir: Path, file_stem: str, method: str = "auto", backend: str = "pipeline") -> list[dict[str, Any]]:
-        subdir = output_dir / file_stem / method
+        possible_subdirs = [method, "auto"]
         if backend.startswith("vlm-"):
-            subdir = output_dir / file_stem / "vlm"
-        json_file = subdir / f"{file_stem}_content_list.json"
-
-        if not json_file.exists():
-            raise FileNotFoundError(f"[MinerU] Missing output file: {json_file}")
+            possible_subdirs = ["vlm", "raw", method, "auto"]
+ 
+        subdir = None
+        json_file = None
+        for subdir_name in possible_subdirs:
+            candidate_subdir = output_dir / file_stem / subdir_name
+            candidate_file = candidate_subdir / f"{file_stem}_content_list.json"
+            if candidate_file.exists():
+                subdir = candidate_subdir
+                json_file = candidate_file
+                logging.info(f"[MinerU] Found output in: {subdir}")
+                break
+ 
+        if not json_file or not json_file.exists():
+            raise FileNotFoundError(f"[MinerU] Missing output file in any of: {possible_subdirs}")
 
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -479,26 +483,41 @@ class MinerUParser(RAGFlowPdfParser):
     def _transfer_to_sections(self, outputs: list[dict[str, Any]]):
         sections = []
         for output in outputs:
+            section = None
+            text_level = None  # Only set for TEXT type from VLM output
+
             match output["type"]:
                 case MinerUContentType.TEXT:
-                    section = output["text"]
+                    section = self._strip_vlm_tokens(output["text"])
+                    text_level = output.get("text_level")  # Get heading level from VLM output
                 case MinerUContentType.TABLE:
-                    section = output.get("table_body", "") + "\n".join(output.get("table_caption", [])) + "\n".join(output.get("table_footnote", []))
+                    table_body = self._strip_vlm_tokens(output.get("table_body", ""))
+                    table_caption = [self._strip_vlm_tokens(c) for c in output.get("table_caption", [])]
+                    table_footnote = [self._strip_vlm_tokens(f) for f in output.get("table_footnote", [])]
+                    section = table_body + "\n".join(table_caption) + "\n".join(table_footnote)
                     if not section.strip():
                         section = "FAILED TO PARSE TABLE"
                 case MinerUContentType.IMAGE:
-                    section = "".join(output.get("image_caption", [])) + "\n" + "".join(output.get("image_footnote", []))
+                    image_caption = [self._strip_vlm_tokens(c) for c in output.get("image_caption", [])]
+                    image_footnote = [self._strip_vlm_tokens(f) for f in output.get("image_footnote", [])]
+                    section = "".join(image_caption) + "\n" + "".join(image_footnote)
                 case MinerUContentType.EQUATION:
-                    section = output["text"]
+                    section = self._strip_vlm_tokens(output["text"])
                 case MinerUContentType.CODE:
-                    section = output["code_body"] + "\n".join(output.get("code_caption", []))
+                    code_body = self._strip_vlm_tokens(output.get("code_body", ""))
+                    code_caption = [self._strip_vlm_tokens(c) for c in output.get("code_caption", [])]
+                    section = code_body + "\n".join(code_caption)
                 case MinerUContentType.LIST:
-                    section = "\n".join(output.get("list_items", []))
-                case MinerUContentType.DISCARDED:
+                    list_items = [self._strip_vlm_tokens(item) for item in output.get("list_items", [])]
+                    section = "\n".join(list_items)
+                case MinerUContentType.DISCARDED | MinerUContentType.HEADER | MinerUContentType.FOOTER | MinerUContentType.PAGE_NUMBER | MinerUContentType.TITLE:
+                    # Skip headers, footers, page numbers, titles - not useful for RAG currently
                     pass
+                case _:
+                    self.logger.warning(f"[MinerU] Unknown content type '{output['type']}' encountered, skipping.")
 
             if section:
-                sections.append((section, self._line_tag(output)))
+                sections.append((section, self._line_tag(output), text_level))
         return sections
 
     def _transfer_to_tables(self, outputs: list[dict[str, Any]]):

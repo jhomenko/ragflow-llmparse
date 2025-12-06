@@ -1,0 +1,70 @@
+[
+    [
+        {
+            "type": "header",
+            "bbox": [
+                0.043,
+                0.068,
+                0.21,
+                0.084
+            ],
+            "angle": 0,
+            "content": "EAO User Guide - VERSION 1.02<|im_end|>"
+        },
+        {
+            "type": "header",
+            "bbox": [
+                0.634,
+                0.068,
+                0.708,
+                0.086
+            ],
+            "angle": 0,
+            "content": "April 23, 2021<|im_end|>"
+        },
+        {
+            "type": "title",
+            "bbox": [
+                0.043,
+                0.123,
+                0.465,
+                0.147
+            ],
+            "angle": 0,
+            "content": "EA REVITALIZATION REGULATION & POLICY DEVELOPMENT<|im_end|>"
+        },
+        {
+            "type": "table",
+            "bbox": [
+                0.126,
+                0.151,
+                0.897,
+                0.848
+            ],
+            "angle": 0,
+            "content": "<table><tr><td>Timeline for Release</td><td>Regulations &amp; Foundations</td><td>Engaging Indigenous Nations</td><td>Reviewability &amp; Substitution</td><td>Early Engagement &amp; Readiness Decision</td><td>Process Planning</td><td>Application Development &amp; Review</td><td>Effects Assessment, Recommendation &amp; Decision</td><td>Post-Certificate and C&amp;E</td></tr><tr><td>Phase 1: Late 2019</td><td>·Reviewable Projects Regulation (RPR) \n·Protected Areas Regulation \n·Proponent Fee Regulation \n·Proponent Fee Guideline \n·Amendments to C&amp;E regulations (3) \n·Administrative regulations (4) \n·User Guide V.1.0</td><td></td><td>·Impact Assessment Cooperation Agreement \n·RPR Interactive Interpretation Guide V.1.0</td><td>·Early Engagement Policy V.1.0 – Initial Project Description, Engagement Plan, Detailed Project Description Guidelines. \n·Readiness Decision Policy V.1.0</td><td></td><td></td><td></td><td>·Compliance &amp; Enforcement Policy and Procedures V.1.0</td></tr><tr><td>Phase 2: Early to Mid 2020</td><td>Early 2020 \n·Administrative Monetary Penalties Regulation \nMid 2020 \n·Public Engagement Intentions Paper</td><td>Early 2020 \n·Indigenous Knowledge Guide \nMid 2020 \n·Guide to Consensus Seeking under the Environmental Assessment Act (2018) \n·Indigenous Participation Toolkit</td><td>Early 2020 \n·Project Notification Policy &amp; web tool \nMid 2020 \n·Minister&#x27;s Designation Policy \n·Materials to support Cooperation Agreement</td><td>Early 2020 \n·Exemption Policy</td><td>Early 2020 \n·Process Planning Policy \n·Application Information Requirements \n·Technical Advisory Committee Guidelines \n·Community Advisory Committee Guidelines</td><td>Mid 2020 \n·Application Development &amp; Review Policy</td><td>Early 2020 \n·Effects Assessment Policy. \n·Human and Community Well-Being; Guidelines for Assessing Social, Economic, Cultural and Health Effects in Environmental Assessment in B.C.</td><td>Early 2020 \n·Indigenous Nation Guide to EAO Compliance and Enforcement Mid 2020 \n·Effectiveness Monitoring and Audits Policy \n·Certificate Amendments Policy \n·Certificate Transfers Policy \n·Certificate Extensions Policy \n·Substantial Start Policy</td></tr><tr><td>Phase 3: Late 2020</td><td>·Indigenous Capacity Funding Regulation \n·Dispute Resolution Regulation \n·Public Participation Funding Policy \n·Regional Assessment Regulation \n·Strategic Assessment Regulation</td><td></td><td colspan=\"6\">Additional policy and guidance may be developed to meet operational needs where required.</td></tr></table>"
+        },
+        {
+            "type": "table_caption",
+            "bbox": [
+                0.051,
+                0.852,
+                0.566,
+                0.868
+            ],
+            "angle": 0,
+            "content": "Figure 1 Phase development timelines of regulation, policy, and guidance to support the Environmental Assessment Act (2018).<|im_end|>"
+        },
+        {
+            "type": "page_number",
+            "bbox": [
+                0.035,
+                0.902,
+                0.047,
+                0.913
+            ],
+            "angle": 0,
+            "content": "M<|im_end|>"
+        }
+    ]
+]

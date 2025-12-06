@@ -1,0 +1,1828 @@
+[
+    {
+        "type": "text",
+        "text": "9 RESIDUAL IMPACT AND OFFSET ASSESSMENT<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            130,
+            784,
+            152
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Impacts are confined to the 'Disturbance Footprint' as shown in Figure 2 and Figure 3, which allows for all direct impacts, as well as a construction buffer associated with construction of project infrastructure.<|im_end|>",
+        "bbox": [
+            87,
+            166,
+            907,
+            202
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Following the implementation of measures to avoid and minimise impacts on ecological values, the following residual impacts will occur within the Project Area:<|im_end|>",
+        "bbox": [
+            87,
+            211,
+            907,
+            246
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "108.845 hectares of native vegetation, comprising:<|im_end|>",
+        "bbox": [
+            119,
+            256,
+            534,
+            272
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "○ 30.784 hectares of native patch vegetation;<|im_end|>",
+            "1442 scattered trees (166 Small Trees and 1276 Large Trees); and,<|im_end|>",
+            "155 Large Trees in patches of native vegetation.<|im_end|>"
+        ],
+        "bbox": [
+            179,
+            282,
+            707,
+            350
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "- removal of nationally significant ecological communities:<|im_end|>",
+        "bbox": [
+            119,
+            362,
+            574,
+            376
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "4.747 hectares of the Buloke Woodland ecological community;<|im_end|>",
+            "0.050 hectares of the SHW ecological community;<|im_end|>"
+        ],
+        "bbox": [
+            179,
+            387,
+            680,
+            429
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "- removal of State significant ecological communities<|im_end|>",
+        "bbox": [
+            119,
+            439,
+            537,
+            455
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "8.867 hectares of the Semi-arid Northwest Plains Buloke Grassy Woodland Community;<|im_end|>",
+            "0.060 hectares of the Victorian Temperate Woodland Bird ecological community.<|im_end|>"
+        ],
+        "bbox": [
+            179,
+            466,
+            863,
+            507
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "- removal of 1266 specimens of the State significant Buloke (141 Large Tree in patches, and 1125 scattered trees;<|im_end|>",
+            "- loss of 58 Buloke Mistletoe.<|im_end|>",
+            "- loss of 150 (estimated) Wimmera Woodruff.<|im_end|>",
+            "- Loss of South-eastern Red-tailed Black Cockatoo foraging habitat<|im_end|>"
+        ],
+        "bbox": [
+            119,
+            518,
+            907,
+            630
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "22.746 hectares of Buloke-dominated Plains Woodland EVC.<|im_end|>",
+            "1126 scattered Buloke trees.<|im_end|>"
+        ],
+        "bbox": [
+            179,
+            640,
+            662,
+            682
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "- Loss of 2.3 hectares of Diamond Firetail foraging habitat<|im_end|>",
+        "bbox": [
+            119,
+            694,
+            571,
+            709
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Note that no impacts are currently assumed along any potential proposed road upgrades or new powerline extension due to the absence of a proposed disturbance footprint for these infrastructure.<|im_end|>",
+        "bbox": [
+            87,
+            746,
+            907,
+            781
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "9.1 State (Victorian) Impacts and Offset Requirements<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            87,
+            804,
+            705,
+            825
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "9.1.1 Removal, Destruction or Lopping of Native Vegetation (the Guidelines)<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            87,
+            843,
+            721,
+            860
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "The Guidelines (DELWP 2017) require offsetting as the final step in considering the impacts of development on native vegetation. Emphasis is placed on avoiding and minimising impacts, and only after these steps have been taken should offsets be considered.<|im_end|>",
+        "bbox": [
+            87,
+            870,
+            907,
+            923
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "#<|im_end|>",
+        "bbox": [
+            152,
+            34,
+            211,
+            63
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage<|im_end|>",
+        "bbox": [
+            84,
+            64,
+            272,
+            80
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "partners<|im_end|>",
+        "bbox": [
+            139,
+            82,
+            213,
+            95
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            905,
+            85
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            292,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "page_number",
+        "text": "39<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "The following assessment is based on the extent of impacts to native vegetation within the 'Disturbance Footprint' provided by Iluka on 23/04/2025 (Figure 2).<|im_end|>",
+        "bbox": [
+            89,
+            121,
+            902,
+            156
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Jallumba Marsh Flora Reserve, Darragan Swamp and Red Gum Swamp are not proposed to be impacted as part of the proposal, and potential indirect impacts as a result of altered surface water regimes have been mitigated through the inclusion of a supplementary water supply (Section 8.1.2.7).<|im_end|>",
+        "bbox": [
+            87,
+            167,
+            907,
+            221
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The 'Disturbance Footprint' allows for all direct impacts, as well as a construction buffer associated with construction of project infrastructure. All ecological values located within the Disturbance Footprint and immediately adjacent (where the Disturbance Footprint encroaches by  $10\\%$  or greater into the Tree Protection Zone (TPZ) of a scattered tree or Large Tree in a patch) are assumed to be lost.<|im_end|>",
+        "bbox": [
+            87,
+            230,
+            905,
+            305
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "9.1.1.1 Vegetation proposed to be removed<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            323,
+            455,
+            338
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The Assessment Area is within Location 2, with 108.854 hectares of native vegetation proposed to be removed, comprising 30.784 hectares of patch vegetation, 155 Large Trees in patches, and 1442 scattered trees (1276 Large and 166 Small trees). As such, the application falls under the Detailed assessment pathway (Table 24).<|im_end|>",
+        "bbox": [
+            89,
+            350,
+            905,
+            405
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "Condition scores are provided in the Existing Ecological Conditions report (Ecology and Heritage Partners 2025).<|im_end|>",
+        "bbox": [
+            89,
+            414,
+            905,
+            449
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "table",
+        "img_path": "images/07817061f0c6bcfc39725f2cf0563f80fe15fb750e657f1970d3c06d1a08a136.jpg",
+        "table_caption": [
+            "Table 24. Removal of Native Vegetation (the Guidelines)<|im_end|>"
+        ],
+        "table_footnote": [
+            "Note: PW = Plains Woodland; PGWe = Plains Grassy Wetland; RGS = Red Gum Swamp<|im_end|>"
+        ],
+        "table_body": "<table><tr><td>Assessment pathway</td><td>Detailed</td></tr><tr><td>Location Category</td><td>2</td></tr><tr><td>Total Extent of vegetation (including scattered trees) (ha)</td><td>108.845</td></tr><tr><td>Extent of proposed removal of patch vegetation (ha)</td><td>30.784</td></tr><tr><td>Large Trees in patches (no.)</td><td>155</td></tr><tr><td>Scattered Large Trees</td><td>1276</td></tr><tr><td>Scattered Small Trees</td><td>166</td></tr><tr><td>EVC Conservation Status of vegetation to be removed</td><td>Endangered (PW, PGWe)\nVulnerable (RGS)</td></tr></table>",
+        "bbox": [
+            100,
+            489,
+            915,
+            683
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "9.1.1.2 Offset Targets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            722,
+            284,
+            738
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The offset requirement for native vegetation removal is 24.669 General Habitat Units (GHUs) and 1431 Large Trees. No Species HU's are generated by the proposal (Table 25).<|im_end|>",
+        "bbox": [
+            89,
+            749,
+            907,
+            784
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The resulting Native Vegetation Removal (NVR) report produced by DEECA is presented in Appendix 2.1.<|im_end|>",
+        "bbox": [
+            89,
+            794,
+            865,
+            810
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "table",
+        "img_path": "images/4e1f8b2a03283b9b2c4560088d6c20a845847e6ce94881b09d719a99e0904a53.jpg",
+        "table_caption": [
+            "Table 25. Offset targets.<|im_end|>"
+        ],
+        "table_footnote": [
+            "Note: HU = Habitat Units; * The minimum Strategic Biodiversity Value is 80% of the weighted average score across habitat zones where a General offset is required.<|im_end|>"
+        ],
+        "table_body": "<table><tr><td>General Offsets Required</td><td>24.669 General HUs</td></tr><tr><td>Large Trees</td><td>1431 Large Trees</td></tr><tr><td>Species Offsets Required</td><td>N/A</td></tr><tr><td>Vicinity (catchment / LGA) (GHUs only)</td><td>Wimmera CMA / Horsham Rural City</td></tr><tr><td>Minimum Strategic Biodiversity Value*</td><td>0.242</td></tr></table>",
+        "bbox": [
+            100,
+            851,
+            915,
+            920
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "header",
+        "text": "#<|im_end|>",
+        "bbox": [
+            152,
+            34,
+            211,
+            63
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            64,
+            272,
+            96
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            662,
+            68,
+            904,
+            86
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "page_number",
+        "text": "40<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            965
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "table",
+        "img_path": "",
+        "table_caption": [],
+        "table_footnote": [
+            ""
+        ],
+        "bbox": [
+            99,
+            117,
+            915,
+            164
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "9.1.1.3 Offset Strategy<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            243,
+            294,
+            261
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "According to DEECAs Native Vegetation Offset Register (DEECA 2025d), there are two offset sites within the Wimmera CMA that can be used to satisfy the General Habitat Unit and Large tree offset requirements, demonstrating that the offset obligation can be achieved should the project be approved.<|im_end|>",
+        "bbox": [
+            87,
+            269,
+            907,
+            325
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "An offset register search statement identifying the relevant offsite sites is provided in Appendix 2.2.<|im_end|>",
+        "bbox": [
+            89,
+            334,
+            836,
+            351
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "9.2 Commonwealth Offset Requirements<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            87,
+            373,
+            563,
+            395
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "The Australian Government's EPBC Act Environmental Offsets Policy (DSEWPaC 2012a) outlines a framework for the use of environmental offsets under the EPBC Act, including when they can be required, how they are determined and the framework under which they operate. Clear guidelines on what constitutes a suitable offset are provided and should be considered as part of any proposed offset strategy.<|im_end|>",
+        "bbox": [
+            87,
+            403,
+            907,
+            476
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Offsets to compensate for significant impacts to MNES will be provided in a manner consistent with the requirements of the EPBC Act Environmental Offsets Policy (DSEWPaC 2012a).<|im_end|>",
+        "bbox": [
+            87,
+            486,
+            907,
+            521
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "Ecological surveys undertaken across multiple years identified the presence of several MNES (Section 5.1). Based on the proposed construction and operation of the project, there are proposed significant impacts to habitat for the nationally significant South-eastern Red-tail Black Cockatoo, and remnants of the Buloke Woodland ecological community (Figure 2; Figure 3).<|im_end|>",
+        "bbox": [
+            87,
+            531,
+            907,
+            604
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "9.2.1 Matted Flax-lily<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            623,
+            285,
+            640
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "9.2.1.1 Residual Impacts<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            659,
+            305,
+            676
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "A total of approximately 60 Matted Flax-lily *Dianella amoena* colonies were recorded within the road reserve of Natimuk-Hamilton Road.<|im_end|>",
+        "bbox": [
+            87,
+            686,
+            907,
+            720
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "The Disturbance Footprint has been designed to avoid all impacts to Matted Flax-lily specimens, with the new water pipeline connecting the mine to the Rocklands Douglas pipeline predominantly located within private property adjacent to Natimuk-Hamilton Road, with no specimens located where the pipeline crosses over the road reserve (Figure 2).<|im_end|>",
+        "bbox": [
+            87,
+            731,
+            907,
+            804
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "9.2.1.2 Proposed Offsets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            822,
+            307,
+            840
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "As all Matted Flax-lily specimens are proposed to be retained as part of the project, there are not considered to be any impacts at a local, regional or national scale, and no offsets are proposed.<|im_end|>",
+        "bbox": [
+            87,
+            850,
+            907,
+            885
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            32,
+            277,
+            97
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            907,
+            85
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "page_number",
+        "text": "41<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 2
+    },
+    {
+        "type": "text",
+        "text": "9.2.2 Red-tailed Black Cockatoo<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            123,
+            369,
+            139
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "9.2.2.1 Residual Impacts<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            160,
+            305,
+            175
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "The Project Area is located at the north-eastern extent of the South-eastern Red-tail Black Cockatoo range, with Buloke seed providing a seasonal foraging resource over late summer and early autumn, and eucalypt-dominated woodlands providing roosting habitat for the species.<|im_end|>",
+        "bbox": [
+            87,
+            186,
+            907,
+            240
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Of the 1597 scattered trees and Large Trees proposed to be impacted, 1266 trees are identified as Buloke.<|im_end|>",
+        "bbox": [
+            87,
+            250,
+            885,
+            265
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "A total of 22.747 hectares of foraging habitat in the form of Buloke-dominated Plains Woodland EVC, and 1126 scattered Buloke specimens are proposed to be impacted (Table 26; Table 27).<|im_end|>",
+        "bbox": [
+            87,
+            275,
+            907,
+            312
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "No impacts are proposed to occur to potential roosting habitat recorded for the species around Red Gum Swamp, Darragan Swamp and the southern end of the pipeline alignment (Figure 2).<|im_end|>",
+        "bbox": [
+            87,
+            321,
+            907,
+            356
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "9.2.2.2 Proposed Offsets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            376,
+            305,
+            391
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "The below offset scenario assumes that an offset site will be created at the property located at the corner of Cooks Lane and Natimuk-Hamilton Road, Noradjuha where preliminary assessments identified a large remnant of the Buloke Woodlands ecological community and scattered Buloke trees.<|im_end|>",
+        "bbox": [
+            87,
+            401,
+            907,
+            456
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Given detailed site surveys to determine habitat quality at the proposed offset site have not been completed at the date of this report, the habitat quality is assumed to be 4/10 for the purposes of this offset scenario.<|im_end|>",
+        "bbox": [
+            87,
+            466,
+            907,
+            502
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Completed Offset Assessment Guide calculator<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            519,
+            435,
+            533
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "The EPBC Act offsets policy (DSEWPaC 2012a) provides the details of the offsetting approach for MNES; this includes an Offset Assessment Guide and offset calculator.<|im_end|>",
+        "bbox": [
+            87,
+            544,
+            907,
+            579
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "The Offset Assessment Guide offset calculator (DSEWPaC 2012b) has been completed to determine the area of offset required to adequately compensate for the proposed removal of RTBC habitat within the Project Area. The Offset Assessment Guide offset calculators are provided in Appendix 3.1.<|im_end|>",
+        "bbox": [
+            87,
+            589,
+            907,
+            643
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "To compensate for the proposed loss of 22.747 hectares of foraging habitat, as well as 1126 scattered Buloke trees that provide foraging habitat, a total of 61 hectares of foraging habitat (comprising Buloke-dominated woodland), and the successful recruitment/planting of 1690 Buloke trees is proposed to be undertaken, and be protected and managed within the proposed offset site (Table 27; Table 28).<|im_end|>",
+        "bbox": [
+            87,
+            653,
+            907,
+            727
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "table",
+        "img_path": "images/a17c8c9c8eb1a58b9d221292bbac3b835f34a9f33a35c98f6ece3efd16950b5d.jpg",
+        "table_caption": [
+            "Table 26. Summary of impacts and proposed offsets for RTBC foraging habitat (patches)<|im_end|>"
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>Impact Habitat Quality</td><td>Impact Area (ha)</td><td>Current Offset Quality</td><td>Offset Size (ha)</td><td>Future Offset Quality *</td><td>% of impact offset</td></tr><tr><td>Foraging Habitat (Buloke-dominated Woodland)</td><td>22.75</td><td>4</td><td>61.00</td><td>5</td><td>101.16</td></tr></table>",
+        "bbox": [
+            92,
+            768,
+            905,
+            852
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "header",
+        "text": "#<|im_end|>",
+        "bbox": [
+            152,
+            34,
+            211,
+            63
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            64,
+            273,
+            96
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            907,
+            85
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "page_number",
+        "text": "42<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 3
+    },
+    {
+        "type": "text",
+        "text": "Note: * Future offset quality is predicted to increase to 5 as a result of the replanting of Buloke trees as part of the offset strategy (Table 27).<|im_end|>",
+        "bbox": [
+            87,
+            118,
+            907,
+            149
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "table",
+        "img_path": "images/23cf7f688a719cacdff3d4fb743460acff139cbe33f339c6f047a7e3d850b1cb.jpg",
+        "table_caption": [
+            "Table 27. Summary of impacts and proposed offsets for RTBC foraging habitat (scattered trees)<|im_end|>"
+        ],
+        "table_footnote": [
+            "Note: * Start value is the # Buloke already present within the proposed offset site. This value has been estimated, and will be revised on the completion of the detailed offset site assessment.<|im_end|>"
+        ],
+        "table_body": "<table><tr><td>Impacted Habitat</td><td>Impacted Trees</td><td>Start Value *</td><td>Future Value</td><td>Proposed Offset</td><td>% of impact offset</td></tr><tr><td>Scattered Buloke trees</td><td>1126</td><td>600</td><td>2290</td><td>1690</td><td>100.05</td></tr></table>",
+        "bbox": [
+            92,
+            187,
+            905,
+            235
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Where any areas proposed to be utilised for RTBC foraging habitat also meet the criteria to be defined as the Buloke Woodlands ecological community, these offsets can be achieved concurrently over the same land (Section 9.2.4.2).<|im_end|>",
+        "bbox": [
+            87,
+            306,
+            907,
+            359
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "An Offset Management Plan will be prepared detailing the location, management and monitoring requirements associated with achieving the offset obligation will be prepared following a site assessment confirm the quality and extent of values present within the proposed offset site.<|im_end|>",
+        "bbox": [
+            87,
+            370,
+            907,
+            423
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "9.2.3 Growling Grass Frog<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            443,
+            321,
+            460
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "9.2.3.1 Proposed Impacts<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            479,
+            314,
+            495
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Between 2-4 Growling Grass Frog were heard calling at Darragan Swamp during the 2022 breeding season. No Growling Grass Frog were recorded at any of the other seven wetlands investigated during the survey effort, and based on the location of existing records, the results of the other targeted surveys and condition of overall potential habitat, it is considered highly unlikely that any other resident populations of the species is present or relies on habitat within the Project Area, or is able to access additional habitat within the Project Area if it is not already present.<|im_end|>",
+        "bbox": [
+            87,
+            505,
+            907,
+            617
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Indirect impacts such as changes to water quality, quantity and hydrology as a result of the proposed project may negatively impact this population of Growling Grass Frog.<|im_end|>",
+        "bbox": [
+            87,
+            627,
+            907,
+            663
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Darragan Swamp is an ephemeral wetland that fills regularly and draws down relatively quickly, with water sourced from direct catchment runoff without any connection to river floodplain flows (Water Technology 2025). It is located outside the proposed development footprint, approximately 6 kilometres north-east of Jallumba Marsh.<|im_end|>",
+        "bbox": [
+            87,
+            671,
+            907,
+            744
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "Modelling indicates that Darragan Swamp routinely drops from full or near full to near empty or dry within 1-2 years. The modelling also predicts that Darragan Swamp experiences more regular dry periods, with these periods being quite short and occur on average once every 5 years (Water Technology 2025). Darragan Swamp has a clearly defined outlet channel heading north from the northern end of the wetland. The depth of the wetland is only  $0.9\\mathrm{m}$  and the results show that the wetland storage reaches capacity quite often and spills to downstream receptors at least every one to two years on average, with water levels in the swamp primarily driven by inflow during the wet season in each year, rather than a result of a prolonged multi-year wet period (Water Technology 2025)<|im_end|>",
+        "bbox": [
+            87,
+            755,
+            909,
+            904
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            34,
+            277,
+            96
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            907,
+            85
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "page_number",
+        "text": "43<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 4
+    },
+    {
+        "type": "text",
+        "text": "An analysis of potential impacts to Darragan Swamp found that the wetland will be impacted from early in the mine life with activities scheduled to start from the northern areas resulting in a reduction in catchment area caused by the mine reducing inflows (Water Technology 2025). However, the reduction in inflows is relatively minor and does not significantly alter the hydraulic regime of wetland given that Darragan fills regularly and draws down relatively quickly, and the reduced inflows are unlikely to change the ecological character of the wetland.<|im_end|>",
+        "bbox": [
+            87,
+            121,
+            905,
+            231
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "However, the installation of supplementary pipeline infrastructure is proposed to enable delivery of supplementary water to mitigate any potential hydrological impact to the wetland and ensure that the current hydrological regime is maintained to ensure the suitability of Darragan Swamp as breeding and foraging habitat for Growling Grass Frog is not compromised.<|im_end|>",
+        "bbox": [
+            87,
+            242,
+            907,
+            317
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "9.2.3.2 Proposed Offsets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            335,
+            305,
+            351
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Provided the Wetland Watering Plan (Water Technology 2025) is implemented to ensure that the suitability of Darragan Swamp as a breeding site for Growling Grass Frog is maintained, and the inundation regime that would have occurred pre-mining is maintained in a post-mining scenario (with reference to seasonal conditions within the region), no impacts to Growling Grass Frog are assumed, and no offsets are proposed.<|im_end|>",
+        "bbox": [
+            87,
+            361,
+            907,
+            435
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "9.2.4 Buloke Woodlands of the Riverina and Murray-Darling Depression Bioregions<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            87,
+            453,
+            773,
+            470
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "9.2.4.1 Proposed Impacts<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            489,
+            312,
+            506
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "The Disturbance Footprint will result in proposed impacts of 4.774 hectares to the Buloke Woodlands ecological community (Figure 3).<|im_end|>",
+        "bbox": [
+            87,
+            516,
+            907,
+            551
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "Method for calculating Buloke Woodland habitat quality<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            569,
+            502,
+            585
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "The habitat quality of the Buloke Woodland ecological community at the impact and offset sites were determined using the results of the habitat hectare assessment undertaken in accordance with the Victorian Quality Assessment (VQA) methodology (DSE 2004) and dividing the total by 10 and round to the closest integer in accordance with DCCEEW's preferred method.<|im_end|>",
+        "bbox": [
+            87,
+            594,
+            905,
+            668
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "text",
+        "text": "The habitat quality score and extent of Buloke Woodland proposed to be impacted within the proposed Project Area is provided below (Table 28).<|im_end|>",
+        "bbox": [
+            87,
+            677,
+            907,
+            712
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "table",
+        "img_path": "images/78eeacf3f06e0a044c6ce1a82c3f4dd2a27b0c245d1a16474e1cdd6bc78205e5.jpg",
+        "table_caption": [
+            "Table 28. Habitat hectare assessment and habitat quality of impacted Plains Woodland EVC supporting the Buloke Woodland ecological community<|im_end|>"
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td colspan=\"2\">Vegetation Zone</td><td>PW1a - 1e</td><td>PW3 (all *)</td><td>PW5</td><td>PW7a, 7c-7j</td><td>PW9 *</td><td>PW9j</td></tr><tr><td colspan=\"2\">Bioregion</td><td>Wim</td><td>Wim</td><td>Wim</td><td>Wim</td><td>Wim</td><td>Wim</td></tr><tr><td colspan=\"2\">EVC</td><td>PW</td><td>PW</td><td>PW</td><td>PW</td><td>PW</td><td>PW</td></tr><tr><td colspan=\"2\">EVC Number</td><td>803</td><td>803</td><td>803</td><td>803</td><td>803</td><td>803</td></tr><tr><td colspan=\"2\">EVC Conservation Status</td><td>En</td><td>En</td><td>En</td><td>En</td><td>En</td><td>En</td></tr><tr><td colspan=\"2\">Large Trees /10</td><td>6</td><td>2</td><td>3</td><td>3</td><td>3</td><td>3</td></tr><tr><td colspan=\"2\">Vegetation Zone</td><td>PW1a - 1e</td><td>PW3 (all *)</td><td>PW5</td><td>PW7a, 7c-7j</td><td>PW9 *</td><td>PW9j</td></tr><tr><td rowspan=\"8\">Site Condition /75</td><td>Tree Canopy Cover /5</td><td>4</td><td>5</td><td>4</td><td>4</td><td>5</td><td>5</td></tr><tr><td>Understorey /25</td><td>0</td><td>10</td><td>5</td><td>5</td><td>15</td><td>15</td></tr><tr><td>Lack of Weeds /15</td><td>2</td><td>2</td><td>6</td><td>2</td><td>6</td><td>6</td></tr><tr><td>Recruitment /10</td><td>0</td><td>5</td><td>5</td><td>5</td><td>5</td><td>5</td></tr><tr><td>Organic Matter /5</td><td>2</td><td>4</td><td>4</td><td>5</td><td>5</td><td>5</td></tr><tr><td>Logs /5</td><td>0</td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td></tr><tr><td>Treeless EVC Multiplier</td><td>1.00</td><td>1.00</td><td>1.00</td><td>1.00</td><td>1.00</td><td>1.00</td></tr><tr><td>Subtotal =</td><td>14.00</td><td>30.00</td><td>29.00</td><td>26.00</td><td>41.00</td><td>41.00</td></tr><tr><td rowspan=\"4\">Landscape Context /25</td><td>Patch Size /10</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>8</td></tr><tr><td>Neighbourhood /10</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr><tr><td>Distance to Core Area /5</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>4</td></tr><tr><td>Subtotal =</td><td>3</td><td>3</td><td>3</td><td>3</td><td>3</td><td>13</td></tr><tr><td colspan=\"2\">Habitat Points /100</td><td>17</td><td>33</td><td>32</td><td>29</td><td>44</td><td>54</td></tr><tr><td colspan=\"2\">Habitat Score</td><td>0.17</td><td>0.33</td><td>0.32</td><td>0.29</td><td>0.44</td><td>0.54</td></tr><tr><td colspan=\"2\">EPBC Habitat Quality</td><td>0.2</td><td></td><td>0.3</td><td></td><td>0.4</td><td>0.5</td></tr><tr><td colspan=\"2\">Extent</td><td>0.006</td><td></td><td>2.999</td><td></td><td>1.709</td><td>0.060</td></tr></table>",
+        "bbox": [
+            100,
+            768,
+            870,
+            922
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            32,
+            273,
+            97
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            907,
+            85
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "page_number",
+        "text": "44<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 5
+    },
+    {
+        "type": "table",
+        "img_path": "",
+        "table_caption": [],
+        "table_footnote": [],
+        "bbox": [
+            100,
+            117,
+            872,
+            512
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Given the small extent of Buloke Woodland with a habitat quality of 2 (0.006 hectares), for the purposes of calculating offsets in accordance with the EPBC offset policy (DSEWPaC 2012a), this extent has been combined with the extent for habitat quality 3 vegetation (Table 29).<|im_end|>",
+        "bbox": [
+            87,
+            546,
+            907,
+            602
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "9.2.4.2 Proposed Offsets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            620,
+            307,
+            636
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "The below offset scenario assumes that an offset site will be created at the property located at the corner of Cooks Lane and Natimuk-Hamilton Road, Noradjuha where preliminary assessments identified a large remnant of the Buloke Woodlands ecological community.<|im_end|>",
+        "bbox": [
+            87,
+            646,
+            907,
+            700
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Given detailed site surveys to determine habitat quality at the proposed offset site have not been completed at the date of this report, the habitat quality is assumed to be 4/10 for the purposes of this offset scenario.<|im_end|>",
+        "bbox": [
+            87,
+            709,
+            907,
+            745
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "Completed Offset Assessment Guide calculator<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            90,
+            763,
+            436,
+            778
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "The EPBC Act offsets policy (DSEWPaC 2012a) provides the details of the offsetting approach for MNES; this includes an Offset Assessment Guide and offset calculator.<|im_end|>",
+        "bbox": [
+            87,
+            789,
+            907,
+            822
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "The Offset Assessment Guide offset calculator (DSEWPaC 2012b) has been completed to determine the area of offset required to adequately compensate for the proposed removal of Buloke Woodland within the Project Area. The Offset Assessment Guide offset calculators are provided in Appendix 3.2.<|im_end|>",
+        "bbox": [
+            87,
+            834,
+            907,
+            888
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            34,
+            277,
+            96
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            662,
+            68,
+            907,
+            86
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "page_number",
+        "text": "45<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 6
+    },
+    {
+        "type": "text",
+        "text": "To compensate for the proposed loss of 4.774 hectares of the Buloke Woodlands ecological community, a total of 21.5 hectares of the Buloke Woodlands is proposed to be protected and managed within the proposed offset site (Table 29).<|im_end|>",
+        "bbox": [
+            87,
+            121,
+            907,
+            177
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Where the proposed 21.5 hectares of Buloke Woodland also provided RTBC foraging habitat, the Buloke Woodland community can also contribute to the RTBC offset (i.e. the 21.5 hectares of Buloke Woodland offset can be located within the broader 61 hectare RTBC foraging habitat offset).<|im_end|>",
+        "bbox": [
+            87,
+            185,
+            907,
+            241
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "table",
+        "img_path": "images/9fb035a9cccb4fd557760ac558874ed9448ee391f7b292dcc85703b38ac3244e.jpg",
+        "table_caption": [
+            "Table 29. Summary of impacts and proposed offsets for the Buloke Woodlands ecological community<|im_end|>"
+        ],
+        "table_footnote": [
+            "Note: * Extent of impacts to habitat quality 2 have been combined with the extent of impacts to habitat quality 3; No increase in habitat quality assumed.<|im_end|>"
+        ],
+        "table_body": "<table><tr><td>Impacted Habitat Quality</td><td>Impact Area (ha)</td><td>Current Offset Quality</td><td>Offset Size (ha)</td><td>Future Offset \\(Quality^{\\wedge}\\)</td><td>% of impact offset</td></tr><tr><td>Habitat Quality 3 *</td><td>3.005</td><td>4</td><td>12</td><td>4</td><td>100.42</td></tr><tr><td>Habitat Quality 4</td><td>1.709</td><td>4</td><td>9.1</td><td>4</td><td>100.43</td></tr><tr><td>Habitat Quality 5</td><td>0.06</td><td>4</td><td>0.4</td><td>4</td><td>100.59</td></tr><tr><td>Total</td><td>4.774</td><td></td><td>21.5</td><td></td><td></td></tr></table>",
+        "bbox": [
+            92,
+            279,
+            905,
+            417
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "An Offset Management Plan will be prepared detailing the location, management and monitoring requirements associated with achieving the offset obligation will be prepared.<|im_end|>",
+        "bbox": [
+            87,
+            462,
+            907,
+            498
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "9.2.5 Grey Box (Eucalyptus microcarpa) Grassy Woodlands and Derived Native Grasslands of South Eastern Australia<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            87,
+            514,
+            907,
+            555
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "9.2.5.1 Proposed Impacts<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            90,
+            574,
+            314,
+            590
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "A total of 26.308 hectares of the Grey Box (Eucalyptus microcarpa) Grassy Woodlands and Derived Native Grasslands of South-eastern Australia (GBGW community) was recorded within the road reserves both Jallumba-Mockinya Road and Wonwondah-Toolondo Road.<|im_end|>",
+        "bbox": [
+            87,
+            600,
+            907,
+            653
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "There are currently no impacts proposed to the GBGW community.<|im_end|>",
+        "bbox": [
+            90,
+            664,
+            594,
+            680
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "9.2.5.2 Proposed Offsets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            90,
+            699,
+            307,
+            715
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "As all remnants of the GBGW community are currently proposed to be retained as part of the project, there are not considered to be any impacts at a local, regional or national scale, and no offsets are proposed.<|im_end|>",
+        "bbox": [
+            87,
+            726,
+            907,
+            762
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "9.2.6 Seasonal Herbaceous Wetlands (Freshwater) of the Temperate Lowland Plains.<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            87,
+            778,
+            789,
+            796
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "9.2.6.1 Proposed Impacts<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            90,
+            816,
+            312,
+            832
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "The nationally significant community Seasonal Herbaceous Wetlands (Freshwater) of the Temperate Lowland Plains (SHW community) is present in one large patch totalling an area of 22.434 hectares located within Jallumba Marsh Flora Reserve.<|im_end|>",
+        "bbox": [
+            87,
+            841,
+            907,
+            897
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            34,
+            273,
+            96
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            907,
+            85
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "page_number",
+        "text": "46<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            966
+        ],
+        "page_idx": 7
+    },
+    {
+        "type": "text",
+        "text": "Based on the current Disturbance Footprint, a total of 0.05 hectares of the SHW community will be impacted as a result of an internal road proposed to be constructed adjacent to Jallumba Marsh Flora Reserve (Figure 2a-vii). The next iteration of the Disturbance Footprint will be amended to avoid impacts to the Seasonal Herbaceous Wetlands (Freshwater) of the Temperate Lowland Plain ecological community.<|im_end|>",
+        "bbox": [
+            87,
+            121,
+            905,
+            195
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "Indirect impacts such as changes to water quality, quantity and hydrology as a result of the proposed project may negatively impact the community, and result in a significant impact.<|im_end|>",
+        "bbox": [
+            87,
+            205,
+            907,
+            240
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "An assessment of potential indirect impacts to the Jallumba Marsh Flora Reserve found that a water reduction will occur, although is modelled to correlate with wetter years only (Water Technology 2025). However, this impact can be minimised through the relocation of stockpiles to restore runoff from the unaffected catchment that feeds Jallumba Marsh Flora Reserve from this direction, and as such, no supplementary watering would be required to maintain the existing values present (i.e. SHW community).<|im_end|>",
+        "bbox": [
+            87,
+            250,
+            905,
+            342
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "Based on the results of the hydrological analysis undertaken by Water Technology (2025), no indirect impacts are assumed to occur to the SHW community.<|im_end|>",
+        "bbox": [
+            87,
+            351,
+            907,
+            388
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "9.2.6.2 Proposed Offsets<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            406,
+            305,
+            422
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "The existing proposed impact of 0.05 hectares is not considered to be a significant impact to the ecological community, and no offsets are proposed.<|im_end|>",
+        "bbox": [
+            87,
+            432,
+            905,
+            468
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "However, it is recommended that Iluka review the internal road alignment that is located directly adjacent to the SHW community to ensure no impact occurs. Further, a buffer should be implemented between the Disturbance Footprint to mitigate against indirect impacts to the community during construction and operation of the project. Further review of potential impacts and offsets associated with the SHW community will be undertaken as preparation of the Wetland Watering Plan (Water Technology 2025) progresses, and further iterations to the Disturbance Footprint occur.<|im_end|>",
+        "bbox": [
+            87,
+            478,
+            907,
+            589
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "9.2.7 Migratory Species<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            89,
+            608,
+            302,
+            625
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "Based on the significant impact guidelines for migratory shorebirds (DoEE 2017), an action is likely to have a significant impact to important habitat for a migratory species if there is a real chance or possibility that it will:<|im_end|>",
+        "bbox": [
+            87,
+            634,
+            907,
+            670
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "- substantially modify (including by fragmenting, altering fire regimes, altering nutrient cycles or altering hydrological cycles), destroy or isolate an area of important habitat for a migratory species;<|im_end|>",
+            "- result in an invasive species that is harmful to the migratory species becoming established in an area of important habitat for the migratory species; or,<|im_end|>",
+            "- seriously disrupt the lifecycle (breeding, feeding, migration or resting behaviour) of an ecologically significant proportion of the population of a migratory species.<|im_end|>"
+        ],
+        "bbox": [
+            119,
+            680,
+            904,
+            804
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "The Project Area is not considered to be classed as internationally important habitat for migratory shorebirds as defined in DoEE (2017) as wetland habitat within the Assessment Area does not regularly support:<|im_end|>",
+        "bbox": [
+            87,
+            815,
+            907,
+            851
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "1% of the individuals of a populations of one species or subspecies of waterbird; or<|im_end|>",
+            "- a total abundance of at least 20,000 waterbirds.<|im_end|>"
+        ],
+        "bbox": [
+            119,
+            860,
+            769,
+            901
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            34,
+            273,
+            96
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            660,
+            68,
+            907,
+            85
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "page_number",
+        "text": "47<|im_end|>",
+        "bbox": [
+            885,
+            954,
+            905,
+            965
+        ],
+        "page_idx": 8
+    },
+    {
+        "type": "text",
+        "text": "Further, the Project Area is not considered to be classed as nationally important habitat for migratory shorebirds as defined in DoEE (2017) as wetland habitat within the Assessment Area does not regularly support:<|im_end|>",
+        "bbox": [
+            87,
+            121,
+            907,
+            177
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "list",
+        "sub_type": "text",
+        "list_items": [
+            "-  $0.1\\%$  of the flyway population of a single species of migratory shorebird; or<|im_end|>",
+            "2,000 migratory shorebirds; or<|im_end|>",
+            "15 migratory shorebird species.<|im_end|>"
+        ],
+        "bbox": [
+            119,
+            186,
+            712,
+            252
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "header",
+        "text": "#<|im_end|>",
+        "bbox": [
+            152,
+            34,
+            211,
+            63
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "header",
+        "text": "ecology & heritage partners<|im_end|>",
+        "bbox": [
+            84,
+            64,
+            272,
+            96
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "header",
+        "text": "www.ehpartners.com.au<|im_end|>",
+        "bbox": [
+            662,
+            68,
+            905,
+            85
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "footer",
+        "text": "Impact Assessment (Ecology): Wimmerera Project, Horsham, Victoria<|im_end|>",
+        "bbox": [
+            294,
+            954,
+            705,
+            967
+        ],
+        "page_idx": 9
+    },
+    {
+        "type": "page_number",
+        "text": "48<|im_end|>",
+        "bbox": [
+            885,
+            956,
+            905,
+            966
+        ],
+        "page_idx": 9
+    }
+]

@@ -1,0 +1,72 @@
+[
+    {
+        "type": "text",
+        "text": "EA REVITALIZATION REGULATION & POLICY DEVELOPMENT<|im_end|>",
+        "text_level": 1,
+        "bbox": [
+            42,
+            122,
+            464,
+            145
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "table",
+        "img_path": "images/f3eb0ea55d6fbc1609189b17d856d63ea4324b705f835c839a6c4d9058115ba0.jpg",
+        "table_caption": [],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>Timeline for Release</td><td>Regulations &amp; Foundations</td><td>Engaging Indigenous Nations</td><td>Reviewability &amp; Substitution</td><td>Early Engagement &amp; Readiness Decision</td><td>Process Planning</td><td>Application Development &amp; Review</td><td>Effects Assessment, Recommendation &amp; Decision</td><td>Post-Certificate and C&amp;E</td></tr><tr><td>Phase 1: Late 2019</td><td>·Reviewable Projects Regulation (RPR) \n·Protected Areas Regulation \n·Proponent Fee Regulation \n·Proponent Fee Guideline \n·Amendments to C&amp;E regulations (3) \n·Administrative regulations (4) \n·User Guide V.1.0</td><td></td><td>·Impact Assessment Cooperation Agreement \n·RPR Interactive Interpretation Guide V.1.0</td><td>·Early Engagement Policy V.1.0 – Initial Project Description, Engagement Plan, Detailed Project Description Guidelines. \n·Readiness Decision Policy V.1.0</td><td></td><td></td><td></td><td>·Compliance &amp; Enforcement Policy and Procedures V.1.0</td></tr><tr><td>Phase 2: Early to Mid 2020</td><td>Early 2020 \n·Administrative Monetary Penalties Regulation \nMid 2020 \n·Public Engagement Intentions Paper</td><td>Early 2020 \n·Indigenous Knowledge Guide \nMid 2020 \n·Guide to Consensus Seeking under the Environmental Assessment Act (2018) \n·Indigenous Participation Toolkit</td><td>Early 2020 \n·Project Notification Policy &amp; web tool \nMid 2020 \n·Minister&#x27;s Designation Policy \n·Materials to support Cooperation Agreement</td><td>Early 2020 \n·Exemption Policy</td><td>Early 2020 \n·Process Planning Policy \n·Application Information Requirements \n·Technical Advisory Committee Guidelines \n·Community Advisory Committee Guidelines</td><td>Mid 2020 \n·Application Development &amp; Review Policy</td><td>Early 2020 \n·Effects Assessment Policy. \n·Human and Community Well-Being; Guidelines for Assessing Social, Economic, Cultural and Health Effects in Environmental Assessment in B.C.</td><td>Early 2020 \n·Indigenous Nation Guide to EAO Compliance and Enforcement Mid 2020 \n·Effectiveness Monitoring and Audits Policy \n·Certificate Amendments Policy \n·Certificate Transfers Policy \n·Certificate Extensions Policy \n·Substantial Start Policy</td></tr><tr><td>Phase 3: Late 2020</td><td>·Indigenous Capacity Funding Regulation \n·Dispute Resolution Regulation \n·Public Participation Funding Policy \n·Regional Assessment Regulation \n·Strategic Assessment Regulation</td><td></td><td colspan=\"6\">Additional policy and guidance may be developed to meet operational needs where required.</td></tr></table>",
+        "bbox": [
+            125,
+            150,
+            896,
+            846
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Figure 1 Phase development timelines of regulation, policy, and guidance to support the Environmental Assessment Act (2018).<|im_end|>",
+        "bbox": [
+            50,
+            851,
+            565,
+            867
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "EAO User Guide - VERSION 1.02<|im_end|>",
+        "bbox": [
+            42,
+            66,
+            209,
+            83
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "header",
+        "text": "April 23, 2021<|im_end|>",
+        "bbox": [
+            633,
+            66,
+            707,
+            84
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "page_number",
+        "text": "M<|im_end|>",
+        "bbox": [
+            34,
+            901,
+            46,
+            911
+        ],
+        "page_idx": 0
+    }
+]

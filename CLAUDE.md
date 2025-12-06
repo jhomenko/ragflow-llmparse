@@ -114,3 +114,20 @@ RAGFlow supports switching between Elasticsearch (default) and Infinity:
 - Docker & Docker Compose
 - uv package manager
 - 16GB+ RAM, 50GB+ disk space
+
+## MinerU VLM Heading-Level Chunking (2025-12-03)
+
+### Feature Overview
+Added heading-level based chunking for MinerU VLM backend output. When using VLM backends (`vlm-http-client`, `vlm-transformers`, `vlm-vllm-engine`), document chunks are split based on heading levels rather than delimiters.
+
+### Key Changes
+- [`deepdoc/parser/mineru_parser.py`](deepdoc/parser/mineru_parser.py): Strips `<|im_end|>` tokens, returns `text_level` for TEXT content
+- [`rag/nlp/__init__.py`](rag/nlp/__init__.py): New [`heading_level_merge()`](rag/nlp/__init__.py:625) function
+- [`rag/app/naive.py`](rag/app/naive.py): VLM backend detection and conditional chunking pathway
+
+### Configuration
+- Environment: `MINERU_BACKEND=vlm-http-client` (or other vlm-* backends)
+- Parser config: `vlm_chunk_heading_level=2` (default)
+
+### Related Files
+- Implementation plan: [`docs/implementation-plans/mineru-vlm-heading-chunking.md`](docs/implementation-plans/mineru-vlm-heading-chunking.md)
