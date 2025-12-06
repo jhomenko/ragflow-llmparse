@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import zipfile
+from html import escape
 from io import BytesIO
 from os import PathLike
 from pathlib import Path
@@ -213,7 +214,7 @@ class MinerUParser(RAGFlowPdfParser):
             self.logger.info(f"[MinerU] invoke api: {self.mineru_api}/file_parse")
             if callback:
                 callback(0.20, f"[MinerU] invoke api: {self.mineru_api}/file_parse")
-            response = requests.post(url=f"{self.mineru_api}/file_parse", files=files, data=data, headers=headers, timeout=1800)
+            response = requests.post(url=f"{self.mineru_api}/file_parse", files=files, data=data, headers=headers, timeout=7200)
 
             response.raise_for_status()
             if response.headers.get("Content-Type") == "application/zip":
@@ -444,6 +445,43 @@ class MinerUParser(RAGFlowPdfParser):
         return text
 
     @staticmethod
+    def _format_text_block(text: str, level: int | None) -> str:
+        if not text:
+            return ""
+        safe_text = escape(text)
+        if level and 1 <= level <= 6:
+            return f"<h{level}>{safe_text}</h{level}>"
+        return f"<p>{safe_text}</p>"
+
+    @staticmethod
+    def _format_list_block(items: list[str]) -> str:
+        cleaned = [escape(item) for item in items if item]
+        if not cleaned:
+            return ""
+        list_items = "".join(f"<li>{item}</li>" for item in cleaned)
+        return f"<ul>{list_items}</ul>"
+
+    @staticmethod
+    def _format_caption(tokens: list[str], tag: str) -> str:
+        cleaned = [escape(token) for token in tokens if token]
+        if not cleaned:
+            return ""
+        return f"<p><{tag}>{' '.join(cleaned)}</{tag}></p>"
+
+    @staticmethod
+    def _format_table_block(body: str, captions: list[str], footnotes: list[str]) -> str:
+        parts = []
+        caption_html = MinerUParser._format_caption(captions, "strong")
+        if caption_html:
+            parts.append(caption_html)
+        if body:
+            parts.append(body)
+        footnote_html = MinerUParser._format_caption(footnotes, "em")
+        if footnote_html:
+            parts.append(footnote_html)
+        return "\n".join(part for part in parts if part)
+
+    @staticmethod
     def extract_positions(txt: str):
         poss = []
         for tag in re.findall(r"@@[0-9-]+\t[0-9.\t]+##", txt):
@@ -488,30 +526,44 @@ class MinerUParser(RAGFlowPdfParser):
 
             match output["type"]:
                 case MinerUContentType.TEXT:
-                    section = self._strip_vlm_tokens(output["text"])
-                    text_level = output.get("text_level")  # Get heading level from VLM output
+                    text = self._strip_vlm_tokens(output["text"])
+                    text_level = output.get("text_level")
+                    section = self._format_text_block(text, text_level)
                 case MinerUContentType.TABLE:
-                    table_body = self._strip_vlm_tokens(output.get("table_body", ""))
+                    table_body = output.get("table_body", "")
                     table_caption = [self._strip_vlm_tokens(c) for c in output.get("table_caption", [])]
                     table_footnote = [self._strip_vlm_tokens(f) for f in output.get("table_footnote", [])]
-                    section = table_body + "\n".join(table_caption) + "\n".join(table_footnote)
-                    if not section.strip():
-                        section = "FAILED TO PARSE TABLE"
+                    section = self._format_table_block(table_body, table_caption, table_footnote)
                 case MinerUContentType.IMAGE:
                     image_caption = [self._strip_vlm_tokens(c) for c in output.get("image_caption", [])]
                     image_footnote = [self._strip_vlm_tokens(f) for f in output.get("image_footnote", [])]
-                    section = "".join(image_caption) + "\n" + "".join(image_footnote)
+                    section = "\n".join(
+                        filter(
+                            None,
+                            [
+                                self._format_caption(image_caption, "strong"),
+                                self._format_caption(image_footnote, "em"),
+                            ],
+                        )
+                    )
                 case MinerUContentType.EQUATION:
-                    section = self._strip_vlm_tokens(output["text"])
+                    equation = self._strip_vlm_tokens(output["text"])
+                    section = f"<p><code>{escape(equation)}</code></p>" if equation else ""
                 case MinerUContentType.CODE:
                     code_body = self._strip_vlm_tokens(output.get("code_body", ""))
                     code_caption = [self._strip_vlm_tokens(c) for c in output.get("code_caption", [])]
-                    section = code_body + "\n".join(code_caption)
+                    parts = []
+                    caption_html = self._format_caption(code_caption, "strong")
+                    if caption_html:
+                        parts.append(caption_html)
+                    if code_body:
+                        parts.append(f"<pre><code>{escape(code_body)}</code></pre>")
+                    section = "\n".join(parts)
                 case MinerUContentType.LIST:
                     list_items = [self._strip_vlm_tokens(item) for item in output.get("list_items", [])]
-                    section = "\n".join(list_items)
-                case MinerUContentType.DISCARDED | MinerUContentType.HEADER | MinerUContentType.FOOTER | MinerUContentType.PAGE_NUMBER | MinerUContentType.TITLE:
-                    # Skip headers, footers, page numbers, titles - not useful for RAG currently
+                    section = self._format_list_block(list_items)
+                case MinerUContentType.DISCARDED | MinerUContentType.HEADER | MinerUContentType.FOOTER | MinerUContentType.PAGE_NUMBER:
+                    # Skip headers/footers/page numbers – not useful for RAG
                     pass
                 case _:
                     self.logger.warning(f"[MinerU] Unknown content type '{output['type']}' encountered, skipping.")
