@@ -32,6 +32,16 @@ This document outlines the implementation plan for adding heading-level based ch
 
 - **[Module Interconnections Guide](./mineru-vlm-module-interconnections.md)** - Comprehensive reference for all module dependencies, imports, and data flows
 
+### UI Follow-up: Render MinerU Math in Chunk Cards ✅
+
+MinerU VLM chunks can include LaTeX (e.g., `$30,000\\mathrm{m}^3$`). Chunk cards now render this markdown/KaTeX instead of showing raw literals by using the shared `HightLightMarkdown` component.
+
+- Updated chunk cards to replace `dangerouslySetInnerHTML` + `DOMPurify` with `<HightLightMarkdown>{item.content_with_weight}</HightLightMarkdown>`:
+  - [`web/src/pages/add-knowledge/components/knowledge-chunk/components/chunk-card/index.tsx`](../../web/src/pages/add-knowledge/components/knowledge-chunk/components/chunk-card/index.tsx)
+  - [`web/src/pages/chunk/parsed-result/add-knowledge/components/knowledge-chunk/components/chunk-card/index.tsx`](../../web/src/pages/chunk/parsed-result/add-knowledge/components/knowledge-chunk/components/chunk-card/index.tsx)
+  - [`web/src/pages/dataflow-result/components/chunk-card/index.tsx`](../../web/src/pages/dataflow-result/components/chunk-card/index.tsx)
+- Result: KaTeX math, inline HTML (e.g., `<sup>3</sup>`), code fences, and tables render correctly without relying on inline HTML injection.
+
 ### Configuration
 
 New parser config option:
